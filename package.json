@@ -1,0 +1,28 @@
+{
+  "name": "isle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node server/main.ts --dev",
+    "start": "node server/main.ts",
+    "check": "tsc --noEmit",
+    "build": "npm run check && vite build",
+    "test": "node --test test/*.test.ts",
+    "restore": "node server/restore.ts"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4"
+  }
+}
