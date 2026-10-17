@@ -370,7 +370,7 @@ function App() {
       {currentId ? <>
         <a className={styles.back} href="#">← 返回总览</a>
         {current ? <>
-          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p></div><div className={styles.transferActions}><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
+          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p></div><div className={styles.transferActions}><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
           <section className={styles.contextCard} aria-label="项目下一步">
             <div className={styles.contextMeta}><span className={styles.status}>{current.status}</span><span>{freshness(current)}</span></div>
             <p className={styles.fieldLabel}>下一步</p>
@@ -439,7 +439,7 @@ function App() {
             <p className={styles.skillDescription}>提供 Codex、OpenCode、Claude Code 和 TRAE 的项目入口。仅补充缺失文件，已有同名文件和项目规则保留。</p>
             {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{({ ready: '就绪', missing: '缺失', custom: '已有不同内容，未覆盖', error: '无法访问' })[file.state]}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
           </section>}
-          <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><div><button className={styles.textButton} onClick={() => openForm(current)}>修改路径</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(current)}>移出看板</button><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button></div></footer>
+          <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><div><button className={styles.textButton} onClick={() => openForm(current)}>修改路径</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(current)}>移出看板</button></div></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
       </> : <>
         <div className={styles.heading}><div><h1>项目</h1><p className={styles.subtitle}>{projects.length ? `${projects.filter(project => project.status === '进行中').length} 个进行中${oldCount ? ` · ${oldCount} 个待检查` : ''}` : '添加本地项目以开始跟踪'}</p></div><button className={styles.primary} onClick={() => openForm()}><Icon name="plus" />添加项目</button></div>
