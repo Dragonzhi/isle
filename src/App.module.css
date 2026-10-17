@@ -1,14 +1,14 @@
 :global(*) { box-sizing: border-box; }
 :global(:root) { font-family: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif; color: #293b35; background: #f6f5f0; font-size: 16px; font-synthesis: none; }
 :global(body) { margin: 0; }
-:global(button), :global(input), :global(textarea) { font: inherit; }
+:global(button), :global(input), :global(textarea), :global(select) { font: inherit; }
 :global(button), :global(a), :global(input), :global(textarea), :global(summary) { -webkit-tap-highlight-color: transparent; }
 :global(button) { cursor: pointer; }
 :global(button:disabled) { cursor: not-allowed; opacity: .55; }
 :global(a) { color: inherit; text-decoration: none; }
 :global(button:focus-visible), :global(a:focus-visible), :global(summary:focus-visible), :global([tabindex]:focus-visible) { outline: 2px solid #4b7965; outline-offset: 4px; }
 :global(input), :global(textarea) { accent-color: #37624f; }
-:global(input:focus), :global(textarea:focus) { outline: 2px solid #749982; outline-offset: 1px; }
+:global(input:focus), :global(textarea:focus), :global(select:focus) { outline: 2px solid #749982; outline-offset: 1px; }
 .app { min-height: 100vh; display: grid; grid-template-columns: 194px minmax(0, 1fr); }
 .sidebar { border-right: 1px solid #e2e4da; padding: 34px 20px; background: #eeefe7; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; }
 .brand { display: flex; gap: 12px; align-items: center; margin: 0 8px 64px; font-size: 24px; font-weight: 650; letter-spacing: 3px; }
@@ -56,8 +56,14 @@ a.projectName:hover { color: #387052; }
 .freshness { font-size: 12px; color: #78836e; white-space: nowrap; }
 .aging { color: #a47a30; }
 .overdue { color: #b46b50; }
-.nextButton { border: 0; background: none; color: #66715e; font-size: 14px; width: 100%; padding: 7px 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.nextCellContent { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.nextButton { border: 0; background: none; color: #66715e; font-size: 14px; min-width: 0; flex: 1; padding: 7px 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .nextButton:hover { color: #305c41; }
+.focusTaskChip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #556f59; background: #e3ebd8; padding: 2px 7px; border-radius: 4px; max-width: 220px; flex-shrink: 0; }
+.focusTaskTitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focusTaskIcon { font-size: 11px; color: #718a73; }
+.focusBadge { font-size: 10px; padding: 1px 6px; background: #dce7d3; color: #355d3f; border-radius: 3px; font-weight: 500; flex-shrink: 0; }
+.detailFocusTask { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #47634c; margin: 14px 0 6px; background: #e1ebda77; padding: 6px 10px; border-radius: 5px; }
 .missing { color: #b07b4a; }
 .iconButton { display: inline-flex; align-items: center; justify-content: center; background: none; color: #829078; border: 0; border-radius: 4px; padding: 5px; }
 .iconButton:hover { background: #e1e7d8; color: #355a47; }
@@ -86,7 +92,12 @@ a.projectName:hover { color: #387052; }
 .projectForm > p { font-size: 12px; line-height: 1.8; color: #849077; margin: 15px 0 22px; }
 .projectForm label { display: block; font-size: 12px; color: #5f7054; margin-top: 20px; }
 .projectForm label > span { font-size: 10px; color: #99a089; margin-left: 7px; }
-.projectForm input { display: block; width: 100%; border: 1px solid #d6ddca; padding: 11px 12px; color: #3d5036; background: #fefefb; border-radius: 5px; font-size: 13px; margin-top: 8px; }
+.projectForm input, .projectForm select, .agentInput { display: block; width: 100%; border: 1px solid #d6ddca; padding: 11px 12px; color: #3d5036; background: #fefefb; border-radius: 5px; font-size: 13px; margin-top: 8px; }
+.agentInput { min-height: 180px; resize: vertical; line-height: 1.8; }
+.agentNav { text-align: left; padding: 12px; font-size: 12px; color: #718476; border: 0; background: transparent; border-radius: 7px; }
+.agentNav:hover { background: #e9eedf; }
+.authorHint { display: block; margin-top: 8px; line-height: 1.7; font-weight: normal; }
+.historyHint { font-size: 11px; color: #829076; }
 .projectForm input::placeholder { color: #a8af9b; }
 .dialogActions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
 .projectForm .formError { color: #aa6246; margin-bottom: 0; }
@@ -123,6 +134,38 @@ a.projectName:hover { color: #387052; }
 .errorCard pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font-size: 11px; }
 .projectFooter { border-top: 1px solid #e0e4d6; padding: 18px 0; display: flex; justify-content: space-between; gap: 16px; align-items: center; font-size: 10px; color: #949f84; }
 .projectFooter > div { display: flex; gap: 15px; align-items: center; }
+.transferActions { display: flex; gap: 9px; flex-wrap: wrap; }
+.summaryCard { border: 1px solid #dae1d0; border-radius: 7px; padding: 18px 22px; margin: 18px 0; background: #fafaf5; }
+.summaryHeading { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-bottom: 12px; }
+.summaryHeading h2 { font-size: 14px; font-weight: 500; margin: 0; }
+.summaryHeading .textButton { display: inline-flex; align-items: center; gap: 5px; }
+.markdown { overflow-wrap: anywhere; font-size: 13px; line-height: 1.85; color: #53654c; max-height: 380px; overflow: auto; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p, .markdown ul, .markdown ol, .markdown blockquote, .markdown pre, .markdown table { margin: 10px 0; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { color: #354f31; font-size: 14px; line-height: 1.5; margin: 18px 0 8px; font-weight: 600; }
+.markdown ul, .markdown ol { padding-left: 23px; }
+.markdown li + li { margin-top: 4px; }
+.markdown li > p { margin: 3px 0; }
+.markdown a { color: #376e50; text-decoration: underline; text-underline-offset: 3px; }
+.markdown code { font-family: Consolas, "Cascadia Code", monospace; font-size: 12px; background: #e9eee1; padding: 2px 4px; border-radius: 3px; }
+.markdown pre { white-space: pre; overflow: auto; padding: 12px; border-radius: 5px; background: #edf0e6; }
+.markdown pre code { padding: 0; background: none; border-radius: 0; }
+.markdown blockquote { margin-left: 0; padding-left: 13px; border-left: 3px solid #bccdaf; color: #7a876d; }
+.markdown table { border-collapse: collapse; font-size: 12px; }
+.markdown th, .markdown td { border: 1px solid #dbe2d1; padding: 6px 10px; text-align: left; }
+.markdown th { background: #edf1e6; font-weight: 600; }
+.markdown hr { border: 0; border-top: 1px solid #dbe2d1; margin: 16px 0; }
+.summaryEmpty { font-size: 12px; line-height: 1.8; color: #7a886e; margin: 0; }
+.summaryInput { width: 100%; min-height: 220px; resize: vertical; padding: 12px; border: 1px solid #b9c9ac; border-radius: 5px; background: #fffef9; font-size: 13px; line-height: 1.8; color: #3e5735; }
+.comparison pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow: auto; font: inherit; }
+.transferTabs { display: flex; align-items: center; gap: 12px; margin-top: 20px; }
+.transferTabs > button { border: 1px solid #d9e0ce; border-radius: 5px; padding: 8px 12px; font-size: 12px; background: #f4f5ee; color: #66785b; }
+.transferTabs > button[aria-pressed="true"] { background: #e1ead7; border-color: #b9c8aa; color: #355a47; }
+.transferTabs > span { font-size: 12px; color: #a0ab93; }
+.summaryPreview { margin-top: 15px; font-size: 12px; color: #758368; }
+.summaryPreview summary { cursor: pointer; margin-bottom: 8px; }
+.projectForm .transferNote { color: #526e44; background: #e9efdf; border-radius: 5px; padding: 10px; font-size: 12px; margin-bottom: 0; }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 @media (max-width: 1100px) {
   .app { grid-template-columns: 158px minmax(0, 1fr); }

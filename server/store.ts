@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Project, Snapshot } from '../shared/types.ts';
-import { hash, parseTasks, template, updateNext } from './tasks.ts';
+import { hash, parseTasks, template, updateRecord } from './tasks.ts';
 
 export class AppError extends Error {
   status: number;
@@ -70,8 +70,13 @@ export function decodeBackup(data: Buffer, target: string) {
 export class Store {
   home: string;
   registryFile: string;
+  settingsFile: string;
   private pending: Promise<unknown> = Promise.resolve();
-  constructor(home: string) { this.home = path.resolve(home); this.registryFile = path.join(this.home, 'projects.txt'); }
+  constructor(home: string) {
+    this.home = path.resolve(home);
+    this.registryFile = path.join(this.home, 'projects.txt');
+    this.settingsFile = path.join(this.home, 'settings.json');
+  }
 
   // ponytail: one write queue is sufficient for a local single-user board; split only if measured contention appears.
   write<T>(action: () => Promise<T>): Promise<T> {
@@ -110,7 +115,7 @@ export class Store {
   }
 
   async project(entry: Entry): Promise<Project> {
-    const base: Project = { ...entry, state: 'ok', status: '进行中', next: '', updated: '', estimated: false, age: 0, hash: '', tasks: [], warnings: [] };
+    const base: Project = { ...entry, state: 'ok', status: '进行中', next: '', summary: '', history: '', updated: '', estimated: false, age: 0, hash: '', tasks: [], warnings: [] };
     try {
       await validateDirectory(entry.path);
     } catch (error) {
@@ -133,7 +138,49 @@ export class Store {
     const registry = await this.registry();
     const projects = await Promise.all(registry.entries.map(entry => this.project(entry)));
     projects.sort((a, b) => Number(a.status === '已完成') - Number(b.status === '已完成') || b.updated.localeCompare(a.updated) || a.name.localeCompare(b.name, 'zh-CN'));
-    return { projects, warnings: registry.warnings, registryHash: hash(registry.data) };
+    let agents: string[] = [], settingsHash: string | null = null;
+    try {
+      const settings = await this.settings();
+      agents = this.agentNames(settings.value.agents ?? ['Codex', 'OpenCode', 'Trae']);
+      settingsHash = hash(settings.data);
+    } catch {
+      registry.warnings.push('Agent 名单无法读取，请检查 settings.json 的格式和访问权限；项目记录仍可使用。');
+    }
+    return { projects, warnings: registry.warnings, registryHash: hash(registry.data), agents, settingsHash };
+  }
+
+  async settings() {
+    let data = Buffer.alloc(0);
+    let exists = true;
+    try { data = (await readRegular(this.settingsFile)).data; }
+    catch (error) { if (code(error) !== 'ENOENT') throw error; exists = false; }
+    try {
+      const value = exists ? JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)) : {};
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw 0;
+      return { data, value: value as Record<string, unknown> };
+    } catch { throw new AppError('settings.json 格式无效，请先在原文件中修正；不会覆盖原设置。', 422); }
+  }
+
+  agentNames(input: unknown): string[] {
+    if (!Array.isArray(input) || input.length > 50 || input.some(name => typeof name !== 'string')) throw new AppError('Agent 名单须为不超过 50 个名称的列表。', 422);
+    const names = (input as string[]).map(name => name.trim());
+    if (names.some(name => !name || name.length > 60 || /[\p{Cc}\p{Cf}·：:]/u.test(name))) throw new AppError('每个名称须为 1–60 个字符，不能包含控制字符、冒号或“·”。', 422);
+    if (new Set(names.map(name => name.toLocaleLowerCase())).size !== names.length) throw new AppError('Agent 名称不能重复（不区分大小写）。', 422);
+    return names;
+  }
+
+  async saveAgents(input: unknown, expectedHash: unknown) {
+    return this.write(async () => {
+      const agents = this.agentNames(input);
+      const settings = await this.settings();
+      if (expectedHash !== hash(settings.data)) throw new AppError('设置已变化，请重新打开 Agent 名单后再编辑；你的输入仍保留。', 409);
+      // Preserve other settings and never expose their values through the API.
+      const saved = { ...settings.value, agents };
+      await this.atomic(this.settingsFile, Buffer.from(JSON.stringify(saved, null, 2) + '\n'), async () => {
+        if (hash((await this.settings()).data) !== expectedHash) throw new AppError('保存期间设置被外部修改，请重新打开名单后核对。', 409);
+      });
+      return this.snapshot();
+    });
   }
 
   async atomic(file: string, data: Buffer, beforeRename?: () => Promise<void>) {
@@ -203,6 +250,10 @@ export class Store {
   }
 
   async editNext(id: string, next: unknown, expectedHash: unknown) {
+    return this.editRecord(id, { next }, expectedHash);
+  }
+
+  async editRecord(id: string, changes: { next?: unknown; summary?: unknown }, expectedHash: unknown) {
     return this.write(async () => {
       const entry = (await this.registry()).entries.find(entry => entry.id === id);
       if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
@@ -212,7 +263,7 @@ export class Store {
       if (expectedHash !== hash(data)) throw new AppError('TASKS.md 已被其他程序修改。你的输入仍保留，请先刷新核对后再编辑。', 409);
       if (!parseTasks(data).readable) throw new AppError('文件内容无法识别，请先在原文件中修正。', 422);
       let updated: Buffer;
-      try { updated = updateNext(data, next as string); }
+      try { updated = updateRecord(data, changes); }
       catch (error) { throw new AppError((error as Error).message, 422); }
       if (updated.equals(data)) return this.snapshot();
       const backupFile = file + '.bak';
