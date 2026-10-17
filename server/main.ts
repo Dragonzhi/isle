@@ -71,14 +71,17 @@ export async function createApplication(options: { home: string; dev?: boolean; 
         if (req.method === 'GET' && url.pathname === '/api/projects') { json(await store.snapshot()); return; }
         const gitRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/git$/);
         if (req.method === 'GET' && gitRoute) { json(await store.gitHistory(gitRoute[1])); return; }
+        const skillRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/skill$/);
+        if (req.method === 'GET' && skillRoute) { json(await store.projectSkill(skillRoute[1])); return; }
         if (!['POST', 'PATCH', 'DELETE'].includes(req.method ?? '')) throw new AppError('不支持的请求方式。', 405);
         if (req.headers.origin !== origin) throw new AppError('写入请求必须来自案屿页面。', 403);
         const input = await body(req);
+        if (req.method === 'POST' && skillRoute) { json(await store.installProjectSkill(skillRoute[1])); return; }
         if (req.method === 'PATCH' && url.pathname === '/api/agents') { json(await store.saveAgents(input.agents, input.settingsHash)); return; }
-        if (req.method === 'POST' && url.pathname === '/api/projects') { json(await store.register({ path: input.path, name: input.name, registryHash: input.registryHash }), 201); return; }
+        if (req.method === 'POST' && url.pathname === '/api/projects') { json(await store.register({ path: input.path, name: input.name, registryHash: input.registryHash, installSkill: input.installSkill }), 201); return; }
         const match = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})(\/repoint)?$/);
         if (!match) throw new AppError('接口不存在。', 404);
-        if (match[2] && req.method === 'POST') { json(await store.register({ path: input.path, name: input.name, registryHash: input.registryHash, replaceId: match[1] })); return; }
+        if (match[2] && req.method === 'POST') { json(await store.register({ path: input.path, name: input.name, registryHash: input.registryHash, replaceId: match[1], installSkill: input.installSkill })); return; }
         if (!match[2] && req.method === 'PATCH') {
           if (!Object.hasOwn(input, 'next') && !Object.hasOwn(input, 'summary')) throw new AppError('请提供下一步或交接摘要。');
           json(await store.editRecord(match[1], { next: input.next, summary: input.summary }, input.hash)); return;

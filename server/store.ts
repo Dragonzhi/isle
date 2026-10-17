@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitHistory, Project, Snapshot } from '../shared/types.ts';
+import type { GitHistory, Project, ProjectSkill, SkillFile, Snapshot } from '../shared/types.ts';
 import { hash, parseTasks, template, updateRecord } from './tasks.ts';
 
 const runGit = promisify(execFile);
@@ -60,6 +60,28 @@ export async function validateDirectory(input: unknown) {
 type Entry = { id: string; path: string; name: string; line: number };
 type Registry = { data: Buffer; entries: Entry[]; lines: string[]; warnings: string[] };
 const backupFormat = 'isle-task-backup-v1';
+
+async function skillTemplates() {
+  const [skill, metadata] = await Promise.all([
+    fs.readFile(new URL('../skills/isle/SKILL.md', import.meta.url)),
+    fs.readFile(new URL('../skills/isle/agents/openai.yaml', import.meta.url)),
+  ]);
+  const entry = Buffer.from(`---\nname: isle\ndescription: 案屿开工、收工和项目交接入口；需要按案屿规范回写 TASKS.md 时使用。\n---\n\n# 案屿项目交接\n\n先完整读取并遵循[通用案屿规范](../../../.agents/skills/isle/SKILL.md)，再按用户要求执行开工或收工。\n规范文件位于项目根目录的 .agents/skills/isle/SKILL.md，任务文件为同一项目根目录的 TASKS.md，不在此入口目录下。\n如果通用规范缺失，提示用户在案屿中补齐项目 Skill，不自行编造规则。\n`);
+  return [
+    { path: '.agents/skills/isle/SKILL.md', data: skill },
+    { path: '.agents/skills/isle/agents/openai.yaml', data: metadata },
+    { path: '.claude/skills/isle/SKILL.md', data: entry },
+    { path: '.trae/skills/isle/SKILL.md', data: entry },
+  ];
+}
+
+function skillReport(files: SkillFile[]): ProjectSkill {
+  const primary = files[0].state;
+  const state = files.every(file => file.state === 'ready') ? 'ready'
+    : primary === 'custom' || primary === 'error' ? primary
+    : files.every(file => file.state === 'missing') ? 'missing' : 'partial';
+  return { state, files };
+}
 
 export function decodeBackup(data: Buffer, target: string) {
   try {
@@ -233,26 +255,77 @@ export class Store {
     } finally { if (created) await fs.unlink(temp).catch(() => {}); }
   }
 
-  async ensureTasks(directory: string, name: string) {
-    const file = path.join(directory, 'TASKS.md');
+  async ensureFile(file: string, data: Buffer, label = '模板') {
     await noLinks(file);
     try { await fs.lstat(file); return; } catch (error) { if (code(error) !== 'ENOENT') throw error; }
-    const temp = path.join(directory, `TASKS.md.isle-${randomUUID()}.tmp`);
+    const temp = path.join(path.dirname(file), `TASKS.md.isle-${randomUUID()}.tmp`);
     let created = false;
     try {
       const handle = await fs.open(temp, 'wx', 0o600);
       created = true;
-      try { await handle.writeFile(template(name)); await handle.sync(); } finally { await handle.close(); }
+      try { await handle.writeFile(data); await handle.sync(); } finally { await handle.close(); }
       await noLinks(file);
       // A hard link publishes the fully written file atomically and fails if the destination now exists.
       try { await fs.link(temp, file); }
       catch (error) {
-        if (['EPERM', 'ENOTSUP', 'EXDEV'].includes(code(error) ?? '')) throw new AppError('此目录不支持安全创建模板。请手动新建 UTF-8 的 TASKS.md 后重新添加；已有文件不会被覆盖。');
+        if (['EPERM', 'ENOTSUP', 'EXDEV'].includes(code(error) ?? '')) throw new AppError(`此目录不支持安全创建${label}。请手动创建文件后重试；已有文件不会被覆盖。`);
         throw error;
       }
     } catch (error) {
       if (code(error) !== 'EEXIST') throw error;
     } finally { if (created) await fs.unlink(temp).catch(() => {}); }
+  }
+
+  async ensureTasks(directory: string, name: string) {
+    await this.ensureFile(path.join(directory, 'TASKS.md'), Buffer.from(template(name)));
+  }
+
+  async skillStatus(directory: string): Promise<ProjectSkill> {
+    const files = await Promise.all((await skillTemplates()).map(async item => {
+      try {
+        const { data } = await readRegular(path.join(directory, item.path));
+        return { path: item.path, state: data.equals(item.data) ? 'ready' : 'custom' } as SkillFile;
+      } catch (error) {
+        return { path: item.path, state: code(error) === 'ENOENT' ? 'missing' : 'error', message: code(error) === 'ENOENT' ? undefined : (error as Error).message } as SkillFile;
+      }
+    }));
+    return skillReport(files);
+  }
+
+  async ensureSkill(directory: string): Promise<ProjectSkill> {
+    const failures = new Map<string, string>();
+    for (const [index, item] of (await skillTemplates()).entries()) {
+      const file = path.join(directory, item.path);
+      try {
+        await noLinks(file);
+        await fs.mkdir(path.dirname(file), { recursive: true });
+        await noLinks(file);
+        await this.ensureFile(file, item.data, '项目 Skill');
+        // Other entrypoints must not redirect agents into an unknown, user-owned skill.
+        if (index === 0 && !(await readRegular(file)).data.equals(item.data)) break;
+      } catch (error) {
+        failures.set(item.path, (error as Error).message);
+        if (index === 0) break;
+      }
+    }
+    const result = await this.skillStatus(directory);
+    return skillReport(result.files.map(file => failures.has(file.path) ? { ...file, state: 'error', message: failures.get(file.path) } : file));
+  }
+
+  async projectSkill(id: string) {
+    const entry = (await this.registry()).entries.find(item => item.id === id);
+    if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+    await validateDirectory(entry.path);
+    return this.skillStatus(entry.path);
+  }
+
+  async installProjectSkill(id: string) {
+    return this.write(async () => {
+      const entry = (await this.registry()).entries.find(item => item.id === id);
+      if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+      await validateDirectory(entry.path);
+      return this.ensureSkill(entry.path);
+    });
   }
 
   async saveRegistry(registry: Registry, text: string) {
@@ -261,10 +334,11 @@ export class Store {
     });
   }
 
-  async register(input: { path: unknown; name?: unknown; registryHash?: unknown; replaceId?: string }) {
+  async register(input: { path: unknown; name?: unknown; registryHash?: unknown; replaceId?: string; installSkill?: unknown }) {
     return this.write(async () => {
       const registry = await this.registry();
       if (input.registryHash !== hash(registry.data)) throw new AppError('项目清单已变化，请刷新后重试。', 409);
+      if (input.installSkill !== undefined && typeof input.installSkill !== 'boolean') throw new AppError('安装 Skill 选项须为布尔值。');
       const directory = await validateDirectory(input.path);
       const name = typeof input.name === 'string' ? input.name.trim() : '';
       if (/[\t\r\n\0]/.test(name) || name.length > 120) throw new AppError('项目名不能包含换行或制表符，且不超过 120 个字符。');
@@ -272,6 +346,7 @@ export class Store {
       const old = input.replaceId ? registry.entries.find(entry => entry.id === input.replaceId) : undefined;
       if (input.replaceId && !old) throw new AppError('项目不在清单中，请刷新。', 404);
       await this.ensureTasks(directory, name || old?.name || path.basename(directory));
+      const skill = input.installSkill === false ? undefined : await this.ensureSkill(directory);
       if (old) {
         registry.lines[old.line] = directory + ((name || old.name) ? `\t${name || old.name}` : '');
         await this.saveRegistry(registry, registry.lines.join(registry.data.includes(Buffer.from('\r\n')) ? '\r\n' : '\n'));
@@ -280,7 +355,9 @@ export class Store {
         const newline = text.includes('\r\n') ? '\r\n' : '\n';
         await this.saveRegistry(registry, text + (text && !text.endsWith('\n') ? newline : '') + directory + (name ? `\t${name}` : '') + newline);
       }
-      return this.snapshot();
+      const snapshot = await this.snapshot();
+      if (skill && skill.state !== 'ready') snapshot.warnings.push('项目已添加；案屿 Skill 尚未全部就绪。请在项目页检查，已有同名文件未覆盖。');
+      return snapshot;
     });
   }
 

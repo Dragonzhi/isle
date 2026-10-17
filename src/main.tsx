@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { GitHistory, Project, Snapshot, TaskState } from '../shared/types.ts';
-import { closeout, focusTask, handoff } from '../shared/types.ts';
+import type { GitHistory, Project, ProjectSkill, Snapshot, TaskState } from '../shared/types.ts';
+import { closeout, focusTask, handoff, skillTransfer } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
 import styles from './App.module.css';
 
@@ -50,6 +50,11 @@ function freshness(project: Project) {
 }
 
 type Editing = { id: string; kind: 'next' | 'summary'; value: string; hash: string; baseline: string; conflict?: boolean; reviewed?: boolean };
+type TransferFormat = 'skill' | 'full';
+function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
+  return format === 'skill' ? skillTransfer(project, mode, author, criteria, goal) : mode === 'close' ? closeout(project, author) : handoff(project, criteria, goal, author);
+}
+const skillLabels = { ready: '已就绪', missing: '尚未安装', partial: '部分入口待补齐', custom: '已有自定义同名 Skill', error: '无法安装或读取' };
 function App() {
   const [data, setData] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,14 +67,17 @@ function App() {
   const [form, setForm] = useState<'add' | Project | null>(null);
   const [formPath, setFormPath] = useState('');
   const [formName, setFormName] = useState('');
+  const [installSkill, setInstallSkill] = useState(true);
   const [formError, setFormError] = useState('');
   const [handoffProject, setHandoffProject] = useState<Project | null>(null);
   const [handoffMode, setHandoffMode] = useState<'start' | 'close'>('start');
+  const [transferFormat, setTransferFormat] = useState<TransferFormat>('full');
   const [goal, setGoal] = useState('');
   const [transferNote, setTransferNote] = useState('');
   const [summaryCopy, setSummaryCopy] = useState<string | null>(null);
   const [git, setGit] = useState<{ id: string; history: GitHistory | null; loading: boolean; error: string }>({ id: '', history: null, loading: false, error: '' });
   const [gitCopy, setGitCopy] = useState<string | null>(null);
+  const [skill, setSkill] = useState<{ id: string; status: ProjectSkill | null; loading: boolean; error: string }>({ id: '', status: null, loading: false, error: '' });
   const [criteria, setCriteria] = useState('');
   const [authors, setAuthors] = useState({ start: '', close: '' });
   const [agentDraft, setAgentDraft] = useState<{ value: string; hash: string | null } | null>(null);
@@ -80,6 +88,7 @@ function App() {
   const editInput = useRef<HTMLInputElement>(null);
   const summaryInput = useRef<HTMLTextAreaElement>(null);
   const gitToken = useRef(0);
+  const skillToken = useRef(0);
 
   const accept = (snapshot: Snapshot) => { arrival.current = performance.now(); setData(snapshot); };
   async function refresh() {
@@ -126,11 +135,13 @@ function App() {
     setBusy(true);
     try {
       const latest = await latestProject(project);
+      const status = await loadSkill(latest);
+      setTransferFormat(status?.state === 'ready' ? 'skill' : 'full');
       setHandoffProject(latest); setHandoffMode(mode); setGoal(''); setCriteria(''); setTransferNote(''); setAuthors({ start: '', close: '' });
     } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
     finally { setBusy(false); }
   }
-  async function copy(project: Project, mode: 'start' | 'close' = 'start', standard = '', target = '', author = '') {
+  async function copy(project: Project, mode: 'start' | 'close' = 'start', standard = '', target = '', author = '', format?: TransferFormat) {
     if (busy || editing) return;
     setBusy(true);
     try {
@@ -138,12 +149,18 @@ function App() {
       if (handoffProject?.id === project.id && latest.hash !== project.hash) {
         setHandoffProject(latest); setTransferNote('文件已更新，预览已刷新。请核对后再次复制。'); return;
       }
+      const status = await loadSkill(latest);
+      const chosenFormat = format ?? (status?.state === 'ready' ? 'skill' : 'full');
+      if (chosenFormat === 'skill' && status?.files[0]?.state !== 'ready') {
+        setTransferNote('通用 Skill 尚未就绪或已被修改，请先检查项目 Skill，或切换到完整提示词。'); return;
+      }
       try {
-        await navigator.clipboard.writeText(mode === 'close' ? closeout(latest, author) : handoff(latest, standard, target, author));
-        const message = mode === 'close' ? '收工词已复制，发给当前 Agent 回写后再刷新。' : '开工词已复制，发给下一位 Agent。';
+        await navigator.clipboard.writeText(transferText(latest, mode, chosenFormat, author, standard, target));
+        const message = mode === 'close' ? `${chosenFormat === 'skill' ? '收工短指令' : '收工词'}已复制，发给当前 Agent 回写后再刷新。` : `${chosenFormat === 'skill' ? '开工短指令' : '开工词'}已复制，发给下一位 Agent。`;
         if (handoffProject) setTransferNote(message); else setNotice({ message });
       } catch {
         setHandoffProject(latest); setHandoffMode(mode); setGoal(target); setCriteria(standard);
+        setTransferFormat(chosenFormat);
         setAuthors(previous => ({ ...previous, [mode]: author }));
         setTransferNote('无法自动复制，请选中下方预览文本手动复制。');
       }
@@ -198,6 +215,28 @@ function App() {
     } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
     finally { setBusy(false); }
   }
+  async function loadSkill(project: Project) {
+    const token = ++skillToken.current;
+    setSkill({ id: project.id, status: null, loading: true, error: '' });
+    try {
+      const status = await request('GET', `/${project.id}/skill`) as ProjectSkill;
+      if (token === skillToken.current) setSkill({ id: project.id, status, loading: false, error: '' });
+      return status;
+    } catch (error) {
+      if (token === skillToken.current) setSkill({ id: project.id, status: null, loading: false, error: (error as Error).message });
+    }
+  }
+  async function installProjectSkill(project: Project) {
+    if (busy) return;
+    setBusy(true);
+    const token = ++skillToken.current;
+    try {
+      const status = await request('POST', `/${project.id}/skill`, {}) as ProjectSkill;
+      if (token === skillToken.current) setSkill({ id: project.id, status, loading: false, error: '' });
+      setNotice({ message: status.state === 'ready' ? '项目 Skill 已就绪，可以复制短指令。' : '未覆盖已有文件；请查看各入口的状态并核对。', error: status.state !== 'ready' });
+    } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
+    finally { setBusy(false); }
+  }
   function stamp() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; }
   function gitCommand(project: Project) {
     const target = `"${project.path}"`;
@@ -224,6 +263,10 @@ function App() {
     if (current && current.state === 'ok') void loadGit(current);
     else setGit(previous => previous.id ? { id: '', history: null, loading: false, error: '' } : previous);
   }, [current?.id, current?.state]);
+  useEffect(() => {
+    if (current && current.state === 'ok') void loadSkill(current);
+    else { skillToken.current++; setSkill(previous => previous.id ? { id: '', status: null, loading: false, error: '' } : previous); }
+  }, [current?.id, current?.state]);
 
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
@@ -247,14 +290,14 @@ function App() {
   }, [visible, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, currentId, busy, editing]);
 
   function openForm(project?: Project) {
-    setForm(project ?? 'add'); setFormPath(project?.path ?? ''); setFormName(project?.name ?? ''); setFormError('');
+    setForm(project ?? 'add'); setFormPath(project?.path ?? ''); setFormName(project?.name ?? ''); setFormError(''); setInstallSkill(true);
   }
   async function register(event: React.FormEvent) {
     event.preventDefault(); if (!data || busy) return;
     setBusy(true); setFormError('');
     try {
       const replacing = form && form !== 'add' ? form : null;
-      accept(await api('POST', replacing ? `/${replacing.id}/repoint` : '', { path: formPath, name: formName, registryHash: data.registryHash }));
+      accept(await api('POST', replacing ? `/${replacing.id}/repoint` : '', { path: formPath, name: formName, registryHash: data.registryHash, installSkill }));
       setForm(null); if (replacing) location.hash = '';
       setNotice({ message: replacing ? '路径已更新' : '项目已添加' });
     } catch (error) { setFormError((error as Error).message); }
@@ -390,6 +433,12 @@ function App() {
               : <p className={styles.summaryEmpty}>{git.history.reason || '暂无提交。'}</p>)}
             <p className={styles.gitHint}>只读预览最近的提交；提交与推送由你在终端执行，案屿不主动操作 git、不出网。</p>
           </section>}
+          {current.state === 'ok' && <section className={styles.summaryCard} aria-label="项目 Skill">
+            <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.secondary} disabled={busy || skill.loading} onClick={() => void installProjectSkill(current)}>安装 / 补齐</button></div>
+            <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}。就绪后可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
+            <p className={styles.skillDescription}>提供 Codex、OpenCode、Claude Code 和 TRAE 的项目入口。仅补充缺失文件，已有同名文件和项目规则保留。</p>
+            {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{({ ready: '就绪', missing: '缺失', custom: '已有不同内容，未覆盖', error: '无法访问' })[file.state]}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
+          </section>}
           <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><div><button className={styles.textButton} onClick={() => openForm(current)}>修改路径</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(current)}>移出看板</button><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button></div></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
       </> : <>
@@ -428,19 +477,23 @@ function App() {
       {agentError && <p className={styles.formError} role="alert">{agentError}</p>}
       <div className={styles.dialogActions}><button type="button" className={styles.secondary} disabled={busy} onClick={() => setAgentDraft(null)}>取消</button><button className={styles.primary} disabled={busy || agentDraft.hash === null}>{busy ? '保存中…' : '保存名单'}</button></div>
     </form></Modal>}
-    {form && <Modal title={form === 'add' ? '添加项目' : '重新指向'} close={() => { if (!busy) setForm(null); }}><form onSubmit={register} className={styles.projectForm}><label>项目目录<input autoFocus required value={formPath} onChange={event => setFormPath(event.target.value)} placeholder={'D:\\work\\my-project'} disabled={busy} autoComplete="off" /></label><label>项目名称 <span>可选，留空使用目录名</span><input value={formName} maxLength={120} onChange={event => setFormName(event.target.value)} placeholder="例如：棱镜" disabled={busy} /></label>{formError && <p className={styles.formError} role="alert">{formError}</p>}<div className={styles.dialogActions}><button type="button" className={styles.secondary} disabled={busy} onClick={() => setForm(null)}>取消</button><button className={styles.primary} disabled={busy}>{busy ? '正在保存…' : form === 'add' ? '添加项目' : '保存'}</button></div></form></Modal>}
+    {form && <Modal title={form === 'add' ? '添加项目' : '重新指向'} close={() => { if (!busy) setForm(null); }}><form onSubmit={register} className={styles.projectForm}><label>项目目录<input autoFocus required value={formPath} onChange={event => setFormPath(event.target.value)} placeholder={'D:\\work\\my-project'} disabled={busy} autoComplete="off" /></label><label>项目名称 <span>可选，留空使用目录名</span><input value={formName} maxLength={120} onChange={event => setFormName(event.target.value)} placeholder="例如：棱镜" disabled={busy} /></label>
+      <label className={styles.skillInstallLabel}><input type="checkbox" checked={installSkill} disabled={busy} onChange={event => setInstallSkill(event.target.checked)} /><span>安装项目级案屿 Skill<small>生成 .agents、.claude、.trae 的项目入口；已有同名文件不覆盖。</small></span></label>
+      {formError && <p className={styles.formError} role="alert">{formError}</p>}<div className={styles.dialogActions}><button type="button" className={styles.secondary} disabled={busy} onClick={() => setForm(null)}>取消</button><button className={styles.primary} disabled={busy}>{busy ? '正在保存…' : form === 'add' ? '添加项目' : '保存'}</button></div></form></Modal>}
     {handoffProject && <Modal title={handoffMode === 'close' ? '收工回写' : '交给新 Agent'} close={() => setHandoffProject(null)}><div className={styles.projectForm}>
       <div className={styles.transferTabs} role="group" aria-label="交接阶段"><button disabled={busy} aria-pressed={handoffMode === 'close'} onClick={() => { setHandoffMode('close'); setTransferNote(''); }}>1 · 收工词</button><span>→</span><button disabled={busy} aria-pressed={handoffMode === 'start'} onClick={() => { setHandoffMode('start'); setTransferNote(''); }}>2 · 开工词</button></div>
       <p>{handoffMode === 'close' ? '发给正在工作的 Agent，让它整理实际结果并回写。回写后刷新，再把开工词交给下一家。' : '带上最新记录，交给下一位 Agent 接着做。打开和复制时都会重新读取任务文件。'}</p>
+      <div className={styles.transferTabs} role="group" aria-label="指令格式"><button aria-pressed={transferFormat === 'skill'} disabled={busy || skill.id !== handoffProject.id || skill.status?.files[0]?.state !== 'ready'} onClick={() => { setTransferFormat('skill'); setTransferNote(''); }}>Skill 短指令</button><button aria-pressed={transferFormat === 'full'} disabled={busy} onClick={() => { setTransferFormat('full'); setTransferNote(''); }}>完整提示词</button></div>
+      {transferFormat === 'full' && skill.status?.state !== 'ready' && <p className={styles.skillDescription}>项目 Skill 尚未全部就绪，当前使用完整提示词；可在项目页安装或检查。</p>}
       <label>{handoffMode === 'close' ? '本次署名' : '接手 Agent'}<select aria-describedby="author-hint" disabled={busy} value={authors[handoffMode]} onChange={event => { setAuthors({ ...authors, [handoffMode]: event.target.value }); setTransferNote(''); }}>
         <option value="">未指定，由 Agent 向我确认署名</option>
         {[...new Set([...(data?.agents ?? []), ...(authors[handoffMode] ? [authors[handoffMode]] : [])])].map(name => <option key={name} value={name}>{name}</option>)}
       </select></label><span id="author-hint" className={styles.authorHint}>收工时追加本次贡献并署名。自定义名称可在侧栏“Agent 名单”中维护。</span>
       {handoffMode === 'start' && <><label>本次目标 <span>可选</span><input disabled={busy} value={goal} maxLength={1000} onChange={event => setGoal(event.target.value)} placeholder="留空按下一步继续，也可以指定这次要做的事" /></label><label>完成标准 <span>可选</span><input disabled={busy} value={criteria} maxLength={800} onChange={event => setCriteria(event.target.value)} placeholder="例如：通过所有单元测试" /></label></>}
-      <textarea className={styles.handoff} aria-label={handoffMode === 'close' ? '收工词预览' : '开工词预览'} readOnly value={handoffMode === 'close' ? closeout(handoffProject, authors.close) : handoff(handoffProject, criteria, goal, authors.start)} onFocus={event => event.target.select()} />
+      <textarea className={`${styles.handoff} ${transferFormat === 'skill' ? styles.shortInstruction : ''}`} aria-label={handoffMode === 'close' ? '收工词预览' : '开工词预览'} readOnly value={transferText(handoffProject, handoffMode, transferFormat, authors[handoffMode], criteria, goal)} onFocus={event => event.target.select()} />
       {handoffMode === 'close' && <details className={styles.summaryPreview}><summary>当前交接摘要</summary><div className={styles.markdown}><SummaryMarkdown text={handoffProject.summary || '暂无摘要。'} /></div></details>}
       {transferNote && <p className={styles.transferNote} role="status">{transferNote}</p>}
-      <div className={styles.dialogActions}>{handoffMode === 'close' && <button className={styles.secondary} disabled={busy} onClick={() => void refreshTransfer()}><Icon name="refresh" />已回写，刷新记录</button>}<button className={styles.primary} disabled={busy} onClick={() => void copy(handoffProject, handoffMode, criteria, goal, authors[handoffMode])}><Icon name="copy" />{busy ? '读取中…' : handoffMode === 'close' ? '复制收工词' : '复制开工词'}</button></div>
+      <div className={styles.dialogActions}>{handoffMode === 'close' && <button className={styles.secondary} disabled={busy} onClick={() => void refreshTransfer()}><Icon name="refresh" />已回写，刷新记录</button>}<button className={styles.primary} disabled={busy} onClick={() => void copy(handoffProject, handoffMode, criteria, goal, authors[handoffMode], transferFormat)}><Icon name="copy" />{busy ? '读取中…' : transferFormat === 'skill' ? '复制短指令' : handoffMode === 'close' ? '复制收工词' : '复制开工词'}</button></div>
     </div></Modal>}
     {summaryCopy !== null && <Modal title="复制交接摘要" close={() => setSummaryCopy(null)}><div className={styles.projectForm}><p>浏览器未允许自动复制，请选中下方原文后复制。</p><textarea autoFocus className={styles.handoff} aria-label="交接摘要原文" readOnly value={summaryCopy} onFocus={event => event.target.select()} /><div className={styles.dialogActions}><button className={styles.secondary} onClick={() => setSummaryCopy(null)}>关闭</button></div></div></Modal>}
     {gitCopy !== null && <Modal title="复制提交/推送命令" close={() => setGitCopy(null)}><div className={styles.projectForm}><p>浏览器未允许自动复制，请选中下方命令后复制，粘贴到终端自行运行。</p><textarea autoFocus className={styles.handoff} aria-label="提交/推送命令" readOnly value={gitCopy} onFocus={event => event.target.select()} /><div className={styles.dialogActions}><button className={styles.secondary} onClick={() => setGitCopy(null)}>关闭</button></div></div></Modal>}

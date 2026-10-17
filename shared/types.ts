@@ -21,6 +21,8 @@ export type Project = {
 export type Snapshot = { projects: Project[]; warnings: string[]; registryHash: string; agents: string[]; settingsHash: string | null };
 export type GitEntry = { hash: string; date: string; message: string };
 export type GitHistory = { available: boolean; reason?: string; entries: GitEntry[] };
+export type SkillFile = { path: string; state: 'ready' | 'missing' | 'custom' | 'error'; message?: string };
+export type ProjectSkill = { state: 'ready' | 'missing' | 'partial' | 'custom' | 'error'; files: SkillFile[] };
 
 export function focusTask(tasks?: Task[]): Task | undefined {
   if (!tasks || !tasks.length) return undefined;
@@ -32,6 +34,16 @@ type TransferProject = Pick<Project, 'name' | 'path' | 'next'> & { tasks?: Task[
 function tasksFile(project: TransferProject) {
   const separator = project.path.includes('\\') ? '\\' : '/';
   return project.path.replace(/[\\/]$/, '') + separator + 'TASKS.md';
+}
+
+export function skillTransfer(project: TransferProject, mode: 'start' | 'close', author = '', criteria = '', goal = '') {
+  const file = tasksFile(project);
+  const root = file.slice(0, -'TASKS.md'.length);
+  return `使用项目内的 isle（案屿）Skill，执行${mode === 'close' ? '收工回写' : '开工交接'}。${author ? `署名：${author}。` : '署名未指定，请先向我确认。'}
+项目：${project.name}
+路径：${project.path}
+${mode === 'start' ? `本次目标：${goal.trim() || '读取项目记录后按 next 续接；目标不明确时先确认。'}\n完成标准：${criteria.trim() || '未指定，请与我确认。'}\n` : ''}若工具未发现此 Skill，请直接读取 ${root}.agents/skills/isle/SKILL.md 并按对应模式处理。
+${mode === 'close' ? '只整理本次已发生的结果，不新增实现、补跑验证或提交代码。' : '先读完整 TASKS.md 并核对实际状态，本次目标优先。'}`;
 }
 
 function writeback(project: TransferProject, author: string) {

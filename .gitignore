@@ -4,3 +4,6 @@ dist/
 .qa/
 *.log
 TASKS.md.bak
+.agents/
+.claude/
+.trae/
