@@ -19,6 +19,8 @@ export type Project = {
   preview?: string;
 };
 export type Snapshot = { projects: Project[]; warnings: string[]; registryHash: string; agents: string[]; settingsHash: string | null };
+export type GitEntry = { hash: string; date: string; message: string };
+export type GitHistory = { available: boolean; reason?: string; entries: GitEntry[] };
 
 export function focusTask(tasks?: Task[]): Task | undefined {
   if (!tasks || !tasks.length) return undefined;

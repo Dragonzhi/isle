@@ -1,8 +1,12 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Project, Snapshot } from '../shared/types.ts';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import type { GitHistory, Project, Snapshot } from '../shared/types.ts';
 import { hash, parseTasks, template, updateRecord } from './tasks.ts';
+
+const runGit = promisify(execFile);
 
 export class AppError extends Error {
   status: number;
@@ -147,6 +151,37 @@ export class Store {
       registry.warnings.push('Agent 名单无法读取，请检查 settings.json 的格式和访问权限；项目记录仍可使用。');
     }
     return { projects, warnings: registry.warnings, registryHash: hash(registry.data), agents, settingsHash };
+  }
+
+  // Read-only git history for the detail page. Never writes to the project; runs git with an args array (no shell),
+  // a hard timeout, and gc disabled so nothing in .git is modified.
+  async gitHistory(id: string): Promise<GitHistory> {
+    const entry = (await this.registry()).entries.find(item => item.id === id);
+    if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+    let directory: string;
+    try { directory = await validateDirectory(entry.path); }
+    catch (error) { return { available: false, reason: (error as Error).message, entries: [] }; }
+    // Treat the directory as a repo only if it is itself a repo root/worktree (has its own .git); never walk up to an unrelated parent repo.
+    let ownsGit = false;
+    try { await fs.lstat(path.join(directory, '.git')); ownsGit = true; }
+    catch (error) { if (code(error) !== 'ENOENT') return { available: false, reason: '无法读取该目录。', entries: [] }; }
+    if (!ownsGit) return { available: false, reason: '这个目录自身不是 Git 仓库（找不到 .git）。', entries: [] };
+    try {
+      const { stdout } = await runGit('git', ['-c', 'gc.auto=0', '--no-pager', '-C', directory, 'log', '-n', '40', '--date=short', '--pretty=format:%h%x1f%ad%x1f%s'], { timeout: 6000, maxBuffer: 1024 * 1024, windowsHide: true });
+      const entries = String(stdout).split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean).map(line => {
+        const [hash, date, ...rest] = line.split('\x1f');
+        return { hash, date, message: rest.join('\x1f') };
+      });
+      return { available: true, entries };
+    } catch (error) {
+      const failure = error as NodeJS.ErrnoException & { stderr?: string | Buffer; killed?: boolean };
+      if (failure.code === 'ENOENT') return { available: false, reason: '未找到 git，请先安装并加入 PATH。', entries: [] };
+      if (failure.killed) return { available: false, reason: '读取 git 历史超时。', entries: [] };
+      const stderr = String(failure.stderr ?? '');
+      if (/not a git repository/i.test(stderr)) return { available: false, reason: '这个目录自身不是 Git 仓库（找不到 .git）。', entries: [] };
+      if (/does not have any commits yet/i.test(stderr)) return { available: true, reason: '仓库还没有任何提交。', entries: [] };
+      return { available: false, reason: stderr.split('\n')[0] || '无法读取 git 历史。', entries: [] };
+    }
   }
 
   async settings() {

@@ -69,6 +69,8 @@ export async function createApplication(options: { home: string; dev?: boolean; 
       }
       if (url.pathname.startsWith('/api/')) {
         if (req.method === 'GET' && url.pathname === '/api/projects') { json(await store.snapshot()); return; }
+        const gitRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/git$/);
+        if (req.method === 'GET' && gitRoute) { json(await store.gitHistory(gitRoute[1])); return; }
         if (!['POST', 'PATCH', 'DELETE'].includes(req.method ?? '')) throw new AppError('不支持的请求方式。', 405);
         if (req.headers.origin !== origin) throw new AppError('写入请求必须来自案屿页面。', 403);
         const input = await body(req);

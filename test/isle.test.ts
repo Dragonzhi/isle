@@ -443,3 +443,69 @@ test('editing a dated summary preserves its heading and rejects duplicate aliase
   assert.equal(fenced.tasks.length, 1);
   assert.ok(!fenced.warnings.some(warning => warning.includes('重复')));
 });
+
+
+function gitRunner(cwd: string) {
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_TERMINAL_PROMPT: '0', HOME: cwd, USERPROFILE: cwd };
+  return (args: string[]) => new Promise<void>((resolve, reject) => execFile('git', ['-c', 'user.name=isle', '-c', 'user.email=isle@test', '-c', 'commit.gpgsign=false', '-c', 'init.defaultBranch=main', ...args], { cwd, env }, (error, _out, stderr) => error ? reject(new Error(String(stderr) || error.message)) : resolve()));
+}
+
+test('git history is read-only: a repo lists entries, a non-repo degrades, unknown id 404s', async t => {
+  const { directory, store } = await fixture(t);
+  const repo = path.join(directory, 'repo');
+  await fs.mkdir(repo);
+  const git = gitRunner(repo);
+  await git(['init']);
+  await fs.writeFile(path.join(repo, 'a.txt'), 'one\n');
+  await git(['add', '.']);
+  await git(['commit', '-m', '首次提交']);
+  await fs.writeFile(path.join(repo, 'a.txt'), 'two\n');
+  await git(['commit', '-am', '第二次提交']);
+
+  let snapshot = await store.register({ path: repo, registryHash: (await store.snapshot()).registryHash });
+  const id = snapshot.projects[0].id;
+  const history = await store.gitHistory(id);
+  assert.equal(history.available, true);
+  assert.ok(history.entries.length >= 2);
+  assert.match(history.entries[0].message, /第二次提交/);
+  assert.match(history.entries[0].hash, /^[0-9a-f]{7,}$/);
+  assert.match(history.entries[0].date, /^\d{4}-\d{2}-\d{2}$/);
+
+  await assert.rejects(store.gitHistory('a'.repeat(24)), /不在清单|刷新/);
+
+  const plain = path.join(directory, 'plain');
+  await fs.mkdir(plain);
+  snapshot = await store.register({ path: plain, registryHash: snapshot.registryHash });
+  const plainHistory = await store.gitHistory(snapshot.projects.find(project => project.path === plain)!.id);
+  assert.equal(plainHistory.available, false);
+  assert.equal(plainHistory.entries.length, 0);
+  assert.ok(plainHistory.reason);
+});
+
+test('git history endpoint is a read-only GET behind the same auth', async t => {
+  const fixtureData = await fixture(t);
+  const app = await createApplication({ home: fixtureData.store.home });
+  t.after(() => app.close());
+  const launch = await app.listen(0);
+  const origin = new URL(launch).origin;
+  const login = await fetch(launch, { redirect: 'manual' });
+  const cookie = login.headers.get('set-cookie')!.split(';')[0];
+  const repo = fixtureData.project;
+  const git = gitRunner(repo);
+  await git(['init']);
+  await fs.writeFile(path.join(repo, 'TASKS.md'), '# t\nnext: x\n');
+  await git(['add', '.']);
+  await git(['commit', '-m', 'init']);
+  const snapshot = await (await fetch(origin + '/api/projects', { headers: { Cookie: cookie } })).json();
+  const added = await fetch(origin + '/api/projects', { method: 'POST', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: JSON.stringify({ path: repo, registryHash: snapshot.registryHash }) });
+  const board = await added.json();
+  const id = board.projects[0].id;
+  assert.equal((await fetch(origin + '/api/projects/' + id + '/git')).status, 401);
+  assert.equal((await fetch(origin + '/api/projects/' + id + '/git', { method: 'POST', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' }, body: '{}' })).status, 404);
+  const response = await fetch(origin + '/api/projects/' + id + '/git', { headers: { Cookie: cookie } });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.available, true);
+  assert.ok(Array.isArray(body.entries) && body.entries.length >= 1);
+  assert.match(body.entries[0].message, /init/);
+});
