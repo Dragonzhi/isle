@@ -75,6 +75,30 @@ function writeback(project: TransferProject, author: string) {
 保存后重新读取，确认任务状态、摘要与本次留痕一致。回复中分别说明任务清单如何更新（或为何无需变更）、摘要和留痕记录了什么，以及下一步；不能只更新摘要就宣告收工回写完成。回复末尾使用同一署名；尚未确认署名时先询问，不伪造身份。`;
 }
 
+export function worktrees(project: Pick<Project, 'name' | 'path'>, base: string, directions: { branch: string; dir: string }[]) {
+  const sep = project.path.includes('/') ? '/' : String.fromCharCode(92);
+  const list = directions.map(item => `- ${item.branch}  →  ..${sep}${item.dir}`).join('\n');
+  const commands = directions.map(item => `git worktree add ..${sep}${item.dir} -b ${item.branch} ${base}`).join('\n');
+  return `项目：${project.name}
+仓库：${project.path}
+基准分支：${base}
+
+请在这个仓库里为并行开发方向创建 git worktree。这是工程侧操作：不要改动当前工作区、未提交改动或当前分支，也不要修改 TASKS.md。
+
+方向：
+${list}
+
+建议命令（先核对状态再执行）：
+${commands}
+
+要求：
+1. 先 git fetch --all --prune，确认基准分支 ${base} 存在；分支或目标目录已存在时停下告诉我，不要覆盖、不要删除、不要强制。
+2. 用 git worktree add 创建目录，放在仓库的同级目录（..${sep}<目录名>）。
+3. 不切换、不移动当前主工作区的分支；不暂存、不提交、不合并、不推送。
+4. 创建后运行 git worktree list，逐条报告 worktree 的绝对路径与对应分支。
+5. 不要在各 worktree 里修改 TASKS.md；我会在案屿里手动添加这些目录，并分别整理每个方向的记录。
+6. 建完提醒我：每个 worktree 各自有一份 TASKS.md，合并方向分支时 next／updated／摘要／留痕等共享行可能冲突，需要手动收敛。`;
+}
 export function closeout(project: TransferProject, author = '') {
   return `项目：${project.name}
 路径：${project.path}

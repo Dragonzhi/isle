@@ -10,7 +10,7 @@ import { SummaryMarkdown } from '../src/SummaryMarkdown.ts';
 import { Store, decodeBackup } from '../server/store.ts';
 import { hash, parseTasks, today, updateNext, updateRecord } from '../server/tasks.ts';
 import { createApplication } from '../server/main.ts';
-import { closeout, focusTask, handoff } from '../shared/types.ts';
+import { closeout, focusTask, handoff, worktrees } from '../shared/types.ts';
 
 async function fixture(t: import('node:test').TestContext) {
   const testRoot = path.resolve('.qa');
@@ -615,4 +615,19 @@ test('worktree grouping resolves relative gitdir pointers and win32 case variant
     const caseProject = snapshot.projects.find(project => path.basename(project.path) === 'case-child')!;
     assert.equal(caseProject.group, mainProject.group);
   }
+});
+
+test('worktree prompt is a copyable instruction that never executes anything', () => {
+  const text = worktrees({ name: 'QQ-agent', path: 'E:\\QQRobot\\QQ-agent' }, 'main', [
+    { branch: 'feature/minecraft', dir: 'QQ-agent-minecraft' },
+    { branch: 'feature/memes', dir: 'QQ-agent-memes' },
+  ]);
+  assert.ok(text.includes('E:\\QQRobot\\QQ-agent'));
+  assert.match(text, /基准分支：main/);
+  assert.match(text, /- feature\/minecraft  →  \.\.\\QQ-agent-minecraft/);
+  assert.match(text, /git worktree add \.\.\\QQ-agent-minecraft -b feature\/minecraft main/);
+  assert.match(text, /不暂存、不提交、不合并、不推送/);
+  assert.match(text, /git worktree list/);
+  assert.match(text, /手动添加/);
+  assert.match(text, /TASKS\.md/);
 });
