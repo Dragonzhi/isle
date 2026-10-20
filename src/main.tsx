@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Fragment, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { GitHistory, Project, ProjectSkill, Snapshot, TaskState } from '../shared/types.ts';
 import { closeout, focusTask, handoff, skillTransfer } from '../shared/types.ts';
@@ -47,6 +47,14 @@ function freshness(project: Project) {
   if (project.state !== 'ok') return project.state === 'offline' ? '离线' : '读取失败';
   if (project.age < 0) return '日期异常';
   return (project.age === 0 ? '今天' : project.age === 1 ? '昨天' : `${project.age} 天前`) + (project.estimated ? ' (估值)' : '');
+}
+
+function baseName(value: string) {
+  const parts = value.split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] || value;
+}
+function groupLabel(projects: Project[], group: string) {
+  return projects.find(project => project.group === group && project.role === 'main')?.name ?? baseName(group);
 }
 
 type Editing = { id: string; kind: 'next' | 'summary'; value: string; hash: string; baseline: string; conflict?: boolean; reviewed?: boolean };
@@ -121,6 +129,22 @@ function App() {
   const done = projects.filter(project => project.status === '已完成');
   const visible = projects.filter(project => (showDone || project.status !== '已完成') && (!onlyStale || stale(project)));
   const oldCount = projects.filter(stale).length;
+  const currentGroup = current?.group ? { label: groupLabel(projects, current.group), count: projects.filter(project => project.group === current.group).length, role: current.role } : null;
+  const boardGroups = (() => {
+    const buckets = new Map<string, Project[]>();
+    for (const project of visible) {
+      const key = project.group ?? 'project:' + project.id;
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(project); else buckets.set(key, [project]);
+    }
+    return [...buckets.entries()].map(([key, members]) => {
+      const sorted = [...members].sort((a, b) => Number(a.status === '已完成') - Number(b.status === '已完成') || Number(b.role === 'main') - Number(a.role === 'main') || b.updated.localeCompare(a.updated) || a.name.localeCompare(b.name, 'zh-CN'));
+      const latest = members.reduce((max, project) => project.updated > max ? project.updated : max, '');
+      const done = members.every(project => project.status === '已完成');
+      return { key, members: sorted, multi: members.length > 1, latest, done };
+    }).sort((a, b) => Number(a.done) - Number(b.done) || b.latest.localeCompare(a.latest));
+  })();
+  const navOrder = boardGroups.flatMap(group => group.members);
 
   async function latestProject(project: Project) {
     const snapshot = await api();
@@ -274,20 +298,20 @@ function App() {
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (event.key === 'Escape') { setSelected(''); return; }
-      const index = visible.findIndex(project => project.id === selected);
+      const index = navOrder.findIndex(project => project.id === selected);
       if (event.key === 'j' || event.key === 'k') {
         event.preventDefault();
-        const next = visible[Math.max(0, Math.min(visible.length - 1, index < 0 ? 0 : index + (event.key === 'j' ? 1 : -1)))];
+        const next = navOrder[Math.max(0, Math.min(navOrder.length - 1, index < 0 ? 0 : index + (event.key === 'j' ? 1 : -1)))];
         if (next) { setSelected(next.id); document.getElementById(`project-${next.id}`)?.scrollIntoView({ block: 'nearest' }); }
       }
-      const project = visible[index];
+      const project = navOrder[index];
       if (!project) return;
       if (event.key === 'Enter' && !target.closest('button,a') && project.state !== 'offline') { event.preventDefault(); location.hash = `project/${project.id}`; }
       if (event.key === 'c' && project.state === 'ok') { event.preventDefault(); void copy(project); }
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [visible, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, currentId, busy, editing]);
+  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, currentId, busy, editing]);
 
   function openForm(project?: Project) {
     setForm(project ?? 'add'); setFormPath(project?.path ?? ''); setFormName(project?.name ?? ''); setFormError(''); setInstallSkill(true);
@@ -355,6 +379,31 @@ function App() {
     </div>;
   }
 
+  function boardCard(project: Project) {
+    const nameId = 'name-' + project.id;
+    return <li id={'project-' + project.id} aria-labelledby={nameId} tabIndex={0} key={project.id} onFocus={() => setSelected(project.id)} onMouseDown={() => setSelected(project.id)} className={[styles.projectCard, selected === project.id ? styles.selected : '', project.state !== 'ok' ? styles.unavailable : ''].filter(Boolean).join(' ')}>
+      <div className={styles.cardHeading}>
+        <h2 id={nameId} className={styles.projectName}>{project.state === 'offline' ? project.name : <a href={'#project/' + project.id} title={project.name}>{project.name}</a>}</h2>
+        <span className={[styles.status, project.status === '暂停' ? styles.paused : ''].filter(Boolean).join(' ')}><span className={[styles.stateDot, project.status === '进行中' && project.state === 'ok' ? styles.green : ''].filter(Boolean).join(' ')} />{project.state === 'ok' ? project.status : project.state === 'offline' ? '离线' : '读取失败'}</span>
+      </div>
+      <p className={styles.cardPath} title={project.path}>{project.path}</p>
+      <div className={styles.cardBody}>
+        <p className={styles.cardLabel}>{project.state === 'ok' ? '下一步' : '需要检查'}</p>
+        {project.state === 'ok' ? nextEditor(project) : <div className={styles.cardError}><p>{project.error}</p><button className={styles.textButton} onClick={() => openForm(project)}>重新指向 →</button></div>}
+      </div>
+      <div className={styles.cardFooter}>
+        <span className={[styles.freshness, stale(project) ? project.age >= 14 ? styles.overdue : styles.aging : ''].filter(Boolean).join(' ')} title={project.updated ? project.updated + (project.estimated ? ' (文件时间估值)' : '') : undefined}>{project.state === 'ok' ? '记录更新 · ' : ''}{freshness(project)}</span>
+        <button
+          className={styles.cardTransfer}
+          disabled={project.state !== 'ok' || busy || Boolean(editing)}
+          title="开工 / 收工（c 复制开工词）"
+          aria-label={project.name + '的开工与收工'}
+          onClick={() => void openTransfer(project, 'start')}
+        ><Icon name="copy" />开工 / 收工</button>
+      </div>
+    </li>;
+  }
+
   const date = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
   return <div className={styles.app}>
     <aside className={styles.sidebar}>
@@ -370,7 +419,7 @@ function App() {
       {currentId ? <>
         <a className={styles.back} href="#">← 返回总览</a>
         {current ? <>
-          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p></div><div className={styles.transferActions}><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
+          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p>{currentGroup && (currentGroup.count > 1 || currentGroup.role === 'worktree') && <p className={styles.groupMeta}>{currentGroup.role === 'main' ? '主线 · 共 ' + currentGroup.count + ' 条线' : currentGroup.label + ' · 工作区'}</p>}</div><div className={styles.transferActions}><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
           <section className={styles.contextCard} aria-label="项目下一步">
             <div className={styles.contextMeta}><span className={styles.status}>{current.status}</span><span>{freshness(current)}</span></div>
             <p className={styles.fieldLabel}>下一步</p>
@@ -449,21 +498,15 @@ function App() {
         </section> : <>
           <div className={styles.toolbar}><span>全部项目 <small>{visible.length}</small></span><div><label className={styles.filter}><input type="checkbox" checked={onlyStale} onChange={event => setOnlyStale(event.target.checked)} />只看久未更新</label><button className={styles.iconButton} aria-label="刷新项目" title="刷新" disabled={loading} onClick={() => void refresh()}><Icon name="refresh" /></button></div></div>
           <ul className={styles.projectGrid} role="list" aria-label="项目总览" data-render-ms={renderMs?.toFixed(1)}>
-            {visible.map(project => <li id={`project-${project.id}`} aria-labelledby={`name-${project.id}`} tabIndex={0} key={project.id} onFocus={() => setSelected(project.id)} onMouseDown={() => setSelected(project.id)} className={`${styles.projectCard} ${selected === project.id ? styles.selected : ''} ${project.state !== 'ok' ? styles.unavailable : ''}`}>
-              <div className={styles.cardHeading}>
-                <h2 id={`name-${project.id}`} className={styles.projectName}>{project.state === 'offline' ? project.name : <a href={`#project/${project.id}`} title={project.name}>{project.name}</a>}</h2>
-                <span className={`${styles.status} ${project.status === '暂停' ? styles.paused : ''}`}><span className={`${styles.stateDot} ${project.status === '进行中' && project.state === 'ok' ? styles.green : ''}`} />{project.state === 'ok' ? project.status : project.state === 'offline' ? '离线' : '读取失败'}</span>
-              </div>
-              <p className={styles.cardPath} title={project.path}>{project.path}</p>
-              <div className={styles.cardBody}>
-                <p className={styles.cardLabel}>{project.state === 'ok' ? '下一步' : '需要检查'}</p>
-                {project.state === 'ok' ? nextEditor(project) : <div className={styles.cardError}><p>{project.error}</p><button className={styles.textButton} onClick={() => openForm(project)}>重新指向 →</button></div>}
-              </div>
-              <div className={styles.cardFooter}>
-                <span className={`${styles.freshness} ${stale(project) ? project.age >= 14 ? styles.overdue : styles.aging : ''}`} title={project.updated ? `${project.updated}${project.estimated ? ' (文件时间估值)' : ''}` : undefined}>{project.state === 'ok' ? '记录更新 · ' : ''}{freshness(project)}</span>
-                <button className={styles.cardTransfer} disabled={project.state !== 'ok' || busy || Boolean(editing)} title="开工 / 收工（c 复制开工词）" aria-label={`${project.name}的开工与收工`} onClick={() => void openTransfer(project, 'start')}><Icon name="copy" />开工 / 收工</button>
-              </div>
-            </li>)}
+            {boardGroups.map(group => group.multi
+              ? <Fragment key={group.key}>
+                <li className={styles.groupHeader} aria-label={'分组 ' + groupLabel(projects, group.key) + '，' + group.members.length + ' 条线'}>
+                  <span className={styles.groupTitle} title={group.key}>{groupLabel(projects, group.key)}</span>
+                  <span className={styles.groupCount}>{group.members.length} 条线</span>
+                </li>
+                {group.members.map(project => boardCard(project))}
+              </Fragment>
+              : group.members.map(project => boardCard(project)))}
           </ul>
           {!visible.length && <p className={styles.emptyText}>没有符合条件的项目。</p>}
           {done.length > 0 && <button className={styles.doneToggle} onClick={() => setShowDone(!showDone)}>{showDone ? '▾' : '▸'} {done.length} 个已完成{showDone ? ' · 收起' : ' · 展开'}</button>}
