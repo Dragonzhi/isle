@@ -1,7 +1,7 @@
 # 案屿
 
 status: 进行中
-next: 看板按 git worktree 自动分组（v0.8）已按审查要点修复（submodule 误归组、键盘顺序、排序）并通过 check/test(32)/build，代码在 feat/worktree-grouping 待 PR #3 合并；下一步合并 PR 后重跑界面验收并实测 isle Skill
+next: 看板按 git worktree 自动分组（v0.8）已通过修复后的隔离界面验收，等待合并 PR #3；下一步合并后实测 isle Skill，并继续 50 项目渲染与启动耗时验证
 updated: 2026-10-20
 
 ## 交接摘要
@@ -32,7 +32,7 @@ updated: 2026-10-20
 ### 工作区分组（已实现）
 - 已确认：项目并行多方向用 git worktree 隔离，每个 worktree 作为独立案屿项目（可注册、git 历史只读该分支，已实测）；看板按主仓库聚类。
 - 已实现（v0.8，设计文档 v0.14 § 十五）：后端 `gitGroup` 只读解析 `.git`（目录→主仓库根，文件→`gitdir:` 指针推导主仓库），暴露 `group`/`role`；首页仅成员 ≥2 的组显标题、单人组视觉不变；项目页显示所属组与角色。不自动发现目录、不写文件、不出网、不跑 git 子进程、不加深任务层级；非仓库／submodule 等异常退化为无分组。
-- 验证：`npm run check`、`npm test`（32 项）、`npm run build` 通过；审查后修复 worktree 内 submodule 误归组（gitdir 尾部锚定）、键盘顺序与已完成后排序、详情页与组名细节；界面验收未重跑。
+- 验证：`npm run check`、`npm test`（32 项）、`npm run build` 通过；审查后修复 worktree 内 submodule 误归组（gitdir 尾部锚定）、键盘顺序与已完成后排序、详情页与组名细节。修复后复跑隔离界面验收通过：390px 无横向溢出；首页两组标题与单人组、键盘 j/k 顺序、worktree/主仓库详情分组文案均正确。
 - 未验证／风险：TASKS.md 跨分支合并冲突是主要现实成本，靠约定缓解。
 
 ### 接着做
@@ -74,4 +74,4 @@ updated: 2026-10-20
 - 2026-10-17 · Codex：实现跨 Agent 收工／开工交接、Markdown 摘要、Agent 名单与署名留痕、日期标题兼容、双列卡片与任务优先详情页，以及项目级 isle Skill 自动安装与多工具入口；各轮 build 与测试（最多 29 项）及隔离浏览器验收通过，改动已提交（至 9321a47）；真实多 Agent 的 Skill 发现与规范回写未验证。
 - 2026-10-17 · DeepSeek Harness：确定 git 历史预览与 push 边界（预览做、push 改「复制命令」、均不交给看板管家）并实现只读 GET /api/projects/:id/git、前端 Git 分区与复制命令按钮；check、23 项测试、build 与隔离 HTTP 冒烟通过，未在真实浏览器验收界面交互。
 - 2026-10-19 · DeepSeek Harness：与用户确定项目并行多方向用 git worktree、看板按主仓库自动分组（方案 c），写入设计文档 v0.14 § 十五；据新约定更新 TASKS.md。本轮只有设计与文档，无代码改动，未运行测试。
-- 2026-10-20 · DeepSeek Harness：实现看板按 git worktree 自动分组（v0.8）：后端只读解析 `.git` 推导主仓库并暴露 group/role，首页按组聚类、项目页显示组与角色；审查后修复 worktree 内 submodule 误归组（gitdir 尾部锚定）、键盘 j/k 顺序、已完成后排序与详情页/组名细节；check、32 项测试、build 通过；界面验收未重跑，代码在 feat/worktree-grouping 分支待 PR。
+- 2026-10-20 · DeepSeek Harness：实现看板按 git worktree 自动分组（v0.8）：后端只读解析 `.git` 推导主仓库并暴露 group/role，首页按组聚类、项目页显示组与角色；审查后修复 worktree 内 submodule 误归组（gitdir 尾部锚定）、键盘 j/k 顺序、已完成后排序与详情页/组名细节；check、32 项测试、build 通过；修复后复跑隔离界面验收通过（390px 无溢出、分组结构与键盘顺序、详情页分组文案正确），代码在 feat/worktree-grouping 分支待合并 PR #3。
