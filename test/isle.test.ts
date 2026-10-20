@@ -509,3 +509,48 @@ test('git history endpoint is a read-only GET behind the same auth', async t => 
   assert.ok(Array.isArray(body.entries) && body.entries.length >= 1);
   assert.match(body.entries[0].message, /init/);
 });
+
+test('worktree grouping derives the main repo and role read-only, degrading when absent', async t => {
+  const { directory, store } = await fixture(t);
+  const main = path.join(directory, 'QQ-Agent');
+  await fs.mkdir(main);
+  const git = gitRunner(main);
+  await git(['init']);
+  await fs.writeFile(path.join(main, 'a.txt'), 'x\n');
+  await git(['add', '.']);
+  await git(['commit', '-m', 'init']);
+  await git(['branch', 'feature/minecraft']);
+  const worktree = path.join(directory, 'QQ-Agent-minecraft');
+  await git(['worktree', 'add', worktree, 'feature/minecraft']);
+  const plain = path.join(directory, 'plain');
+  await fs.mkdir(plain);
+
+  let snapshot = await store.snapshot();
+  for (const dir of [main, worktree, plain]) snapshot = await store.register({ path: dir, registryHash: snapshot.registryHash });
+  const byName = (name: string) => snapshot.projects.find(project => path.basename(project.path) === name)!;
+  const mainProject = byName('QQ-Agent'), worktreeProject = byName('QQ-Agent-minecraft'), plainProject = byName('plain');
+  assert.equal(mainProject.role, 'main');
+  assert.equal(worktreeProject.role, 'worktree');
+  assert.equal(typeof mainProject.group, 'string');
+  assert.equal(mainProject.group, worktreeProject.group);
+  assert.equal(path.basename(mainProject.group!), 'QQ-Agent');
+  assert.equal(plainProject.group, undefined);
+  assert.equal(plainProject.role, undefined);
+
+  // main repo not registered: the worktree still resolves to the same main repo name
+  const other = new Store(path.join(directory, 'state2'));
+  await other.init();
+  let solo = await other.snapshot();
+  solo = await other.register({ path: worktree, registryHash: solo.registryHash });
+  assert.equal(solo.projects[0].role, 'worktree');
+  assert.equal(path.basename(solo.projects[0].group!), 'QQ-Agent');
+
+  // a .git file that is not a linked-worktree pointer (e.g. submodule) must not group
+  const sub = path.join(directory, 'submodule');
+  await fs.mkdir(sub);
+  await fs.writeFile(path.join(sub, '.git'), 'gitdir: ../.git/modules/submodule\n');
+  solo = await other.register({ path: sub, registryHash: solo.registryHash });
+  const subProject = solo.projects.find(project => path.basename(project.path) === 'submodule')!;
+  assert.equal(subProject.group, undefined);
+  assert.equal(subProject.role, undefined);
+});

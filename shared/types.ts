@@ -17,6 +17,8 @@ export type Project = {
   warnings: string[];
   error?: string;
   preview?: string;
+  group?: string;
+  role?: 'main' | 'worktree';
 };
 export type Snapshot = { projects: Project[]; warnings: string[]; registryHash: string; agents: string[]; settingsHash: string | null };
 export type GitEntry = { hash: string; date: string; message: string };

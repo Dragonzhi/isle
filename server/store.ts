@@ -15,6 +15,31 @@ export class AppError extends Error {
 
 function code(error: unknown) { return (error as NodeJS.ErrnoException).code; }
 function pathKey(value: string) { return process.platform === 'win32' ? value.toLowerCase() : value; }
+
+// Read-only: derive the worktree group from the project's .git entry. A .git directory marks
+// a repo root (its own group); a .git file is a linked worktree pointing at
+// <main>/.git/worktrees/<name>, so it groups under that main repo. Never runs git.
+async function gitGroup(directory: string) {
+  const entry = path.join(directory, '.git');
+  let info;
+  try { info = await fs.lstat(entry); } catch { return undefined; }
+  if (info.isDirectory()) return { group: path.normalize(directory), role: 'main' as const };
+  if (!info.isFile()) return undefined;
+  let text: string;
+  try { text = await fs.readFile(entry, 'utf8'); } catch { return undefined; }
+  const match = text.match(/^\s*gitdir:\s*(.+?)\s*$/mi);
+  if (!match) return undefined;
+  let target: string;
+  try { target = path.isAbsolute(match[1]) ? match[1] : path.resolve(directory, match[1]); } catch { return undefined; }
+  const parts = path.normalize(target).split(path.sep);
+  const index = parts.lastIndexOf('worktrees');
+  if (index < 2 || parts[index - 1] !== '.git') return undefined;
+  const main = parts.slice(0, index - 1).join(path.sep);
+  if (!main) return undefined;
+  let group = path.normalize(main);
+  try { group = path.normalize(await fs.realpath(group)); } catch { /* main repo unreachable: keep derived path */ }
+  return { group, role: 'worktree' as const };
+}
 function projectId(value: string) { return hash(pathKey(path.normalize(value))).slice(0, 24); }
 
 export async function noLinks(target: string) {
@@ -142,21 +167,24 @@ export class Store {
 
   async project(entry: Entry): Promise<Project> {
     const base: Project = { ...entry, state: 'ok', status: '进行中', next: '', summary: '', history: '', updated: '', estimated: false, age: 0, hash: '', tasks: [], warnings: [] };
+    let directory: string;
     try {
-      await validateDirectory(entry.path);
+      directory = await validateDirectory(entry.path);
     } catch (error) {
       return { ...base, state: code(error) === 'EACCES' ? 'error' : 'offline', error: (error as Error).message };
     }
+    const git = await gitGroup(directory);
+    const head: Project = git ? { ...base, ...git } : base;
     try {
       const { data, info } = await readRegular(path.join(entry.path, 'TASKS.md'));
       const parsed = parseTasks(data, info.mtime);
-      return { ...base, ...parsed, hash: hash(data), state: parsed.readable ? 'ok' : 'error',
+      return { ...head, ...parsed, hash: hash(data), state: parsed.readable ? 'ok' : 'error',
         error: parsed.readable ? undefined : '文件可读，但未识别到标题、字段或任务。请在原文件中修正。' };
     } catch (error) {
       let message = error instanceof Error ? error.message : '无法读取文件。';
       if (code(error) === 'ENOENT') message = '项目中缺少 TASKS.md。请恢复文件，或重新指向这个目录以生成模板。';
       if (error instanceof TypeError) message = 'TASKS.md 不是有效的 UTF-8 文件，请在编辑器中另存为 UTF-8。';
-      return { ...base, state: 'error', error: message };
+      return { ...head, state: 'error', error: message };
     }
   }
 
