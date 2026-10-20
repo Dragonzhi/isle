@@ -129,7 +129,7 @@ function App() {
   const done = projects.filter(project => project.status === '已完成');
   const visible = projects.filter(project => (showDone || project.status !== '已完成') && (!onlyStale || stale(project)));
   const oldCount = projects.filter(stale).length;
-  const currentGroup = current?.group ? { label: groupLabel(projects, current.group), multi: projects.filter(project => project.group === current.group).length > 1, role: current.role } : null;
+  const currentGroup = current?.group ? { label: groupLabel(projects, current.group), count: projects.filter(project => project.group === current.group).length, role: current.role } : null;
   const boardGroups = (() => {
     const buckets = new Map<string, Project[]>();
     for (const project of visible) {
@@ -138,11 +138,13 @@ function App() {
       if (bucket) bucket.push(project); else buckets.set(key, [project]);
     }
     return [...buckets.entries()].map(([key, members]) => {
-      const sorted = [...members].sort((a, b) => Number(b.role === 'main') - Number(a.role === 'main') || b.updated.localeCompare(a.updated) || a.name.localeCompare(b.name, 'zh-CN'));
+      const sorted = [...members].sort((a, b) => Number(a.status === '已完成') - Number(b.status === '已完成') || Number(b.role === 'main') - Number(a.role === 'main') || b.updated.localeCompare(a.updated) || a.name.localeCompare(b.name, 'zh-CN'));
       const latest = members.reduce((max, project) => project.updated > max ? project.updated : max, '');
-      return { key, members: sorted, multi: members.length > 1, latest };
-    }).sort((a, b) => b.latest.localeCompare(a.latest));
+      const done = members.every(project => project.status === '已完成');
+      return { key, members: sorted, multi: members.length > 1, latest, done };
+    }).sort((a, b) => Number(a.done) - Number(b.done) || b.latest.localeCompare(a.latest));
   })();
+  const navOrder = boardGroups.flatMap(group => group.members);
 
   async function latestProject(project: Project) {
     const snapshot = await api();
@@ -296,20 +298,20 @@ function App() {
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (event.key === 'Escape') { setSelected(''); return; }
-      const index = visible.findIndex(project => project.id === selected);
+      const index = navOrder.findIndex(project => project.id === selected);
       if (event.key === 'j' || event.key === 'k') {
         event.preventDefault();
-        const next = visible[Math.max(0, Math.min(visible.length - 1, index < 0 ? 0 : index + (event.key === 'j' ? 1 : -1)))];
+        const next = navOrder[Math.max(0, Math.min(navOrder.length - 1, index < 0 ? 0 : index + (event.key === 'j' ? 1 : -1)))];
         if (next) { setSelected(next.id); document.getElementById(`project-${next.id}`)?.scrollIntoView({ block: 'nearest' }); }
       }
-      const project = visible[index];
+      const project = navOrder[index];
       if (!project) return;
       if (event.key === 'Enter' && !target.closest('button,a') && project.state !== 'offline') { event.preventDefault(); location.hash = `project/${project.id}`; }
       if (event.key === 'c' && project.state === 'ok') { event.preventDefault(); void copy(project); }
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [visible, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, currentId, busy, editing]);
+  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, currentId, busy, editing]);
 
   function openForm(project?: Project) {
     setForm(project ?? 'add'); setFormPath(project?.path ?? ''); setFormName(project?.name ?? ''); setFormError(''); setInstallSkill(true);
@@ -417,7 +419,7 @@ function App() {
       {currentId ? <>
         <a className={styles.back} href="#">← 返回总览</a>
         {current ? <>
-          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p>{currentGroup && (currentGroup.multi || currentGroup.role === 'worktree') && <p className={styles.groupMeta}>{currentGroup.label} · {currentGroup.role === 'main' ? '主线' : '工作区'}</p>}</div><div className={styles.transferActions}><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
+          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p>{currentGroup && (currentGroup.count > 1 || currentGroup.role === 'worktree') && <p className={styles.groupMeta}>{currentGroup.role === 'main' ? '主线 · 共 ' + currentGroup.count + ' 条线' : currentGroup.label + ' · 工作区'}</p>}</div><div className={styles.transferActions}><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
           <section className={styles.contextCard} aria-label="项目下一步">
             <div className={styles.contextMeta}><span className={styles.status}>{current.status}</span><span>{freshness(current)}</span></div>
             <p className={styles.fieldLabel}>下一步</p>
@@ -498,8 +500,8 @@ function App() {
           <ul className={styles.projectGrid} role="list" aria-label="项目总览" data-render-ms={renderMs?.toFixed(1)}>
             {boardGroups.map(group => group.multi
               ? <Fragment key={group.key}>
-                <li className={styles.groupHeader}>
-                  <span className={styles.groupTitle}>{groupLabel(projects, group.key)}</span>
+                <li className={styles.groupHeader} aria-label={'分组 ' + groupLabel(projects, group.key) + '，' + group.members.length + ' 条线'}>
+                  <span className={styles.groupTitle} title={group.key}>{groupLabel(projects, group.key)}</span>
                   <span className={styles.groupCount}>{group.members.length} 条线</span>
                 </li>
                 {group.members.map(project => boardCard(project))}

@@ -25,6 +25,7 @@ async function gitGroup(directory: string) {
   try { info = await fs.lstat(entry); } catch { return undefined; }
   if (info.isDirectory()) return { group: path.normalize(directory), role: 'main' as const };
   if (!info.isFile()) return undefined;
+  if (info.size > 4096) return undefined;
   let text: string;
   try { text = await fs.readFile(entry, 'utf8'); } catch { return undefined; }
   const match = text.match(/^\s*gitdir:\s*(.+?)\s*$/mi);
@@ -32,9 +33,11 @@ async function gitGroup(directory: string) {
   let target: string;
   try { target = path.isAbsolute(match[1]) ? match[1] : path.resolve(directory, match[1]); } catch { return undefined; }
   const parts = path.normalize(target).split(path.sep);
-  const index = parts.lastIndexOf('worktrees');
-  if (index < 2 || parts[index - 1] !== '.git') return undefined;
-  const main = parts.slice(0, index - 1).join(path.sep);
+  const count = parts.length;
+  // Anchor at the end: only <main>/.git/worktrees/<name> is a linked worktree. A submodule
+  // inside a worktree points at .../worktrees/<wt>/modules/<name> and must not be grouped.
+  if (count < 3 || parts[count - 2] !== 'worktrees' || parts[count - 3] !== '.git') return undefined;
+  const main = parts.slice(0, count - 3).join(path.sep);
   if (!main) return undefined;
   let group = path.normalize(main);
   try { group = path.normalize(await fs.realpath(group)); } catch { /* main repo unreachable: keep derived path */ }
