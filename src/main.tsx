@@ -1,7 +1,7 @@
 import React, { Fragment, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { GitHistory, Project, ProjectSkill, Snapshot, TaskState } from '../shared/types.ts';
-import { closeout, focusTask, handoff, skillTransfer } from '../shared/types.ts';
+import { closeout, focusTask, handoff, skillTransfer, worktrees } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
 import styles from './App.module.css';
 
@@ -57,6 +57,17 @@ function groupLabel(projects: Project[], group: string) {
   return projects.find(project => project.group === group && project.role === 'main')?.name ?? baseName(group);
 }
 
+const worktreePlaceholder = 'feature/minecraft\nfeature/memes';
+function parseWorktreeInput(text: string, repoName: string) {
+  return text.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+    const [branchPart, dirPart] = line.split('|').map(part => part.trim());
+    const parts = branchPart.split('/').filter(Boolean);
+    const label = parts.length > 1 ? parts.slice(1).join('-') : (parts[0] || branchPart);
+    const dir = dirPart || (repoName + '-' + label);
+    return { branch: branchPart, dir };
+  }).filter(item => item.branch);
+}
+
 type Editing = { id: string; kind: 'next' | 'summary'; value: string; hash: string; baseline: string; conflict?: boolean; reviewed?: boolean };
 type TransferFormat = 'skill' | 'full';
 function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
@@ -82,6 +93,10 @@ function App() {
   const [transferFormat, setTransferFormat] = useState<TransferFormat>('full');
   const [goal, setGoal] = useState('');
   const [transferNote, setTransferNote] = useState('');
+  const [worktreeOpen, setWorktreeOpen] = useState(false);
+  const [worktreeBase, setWorktreeBase] = useState('main');
+  const [worktreeInput, setWorktreeInput] = useState('');
+  const [worktreeNote, setWorktreeNote] = useState('');
   const [summaryCopy, setSummaryCopy] = useState<string | null>(null);
   const [git, setGit] = useState<{ id: string; history: GitHistory | null; loading: boolean; error: string }>({ id: '', history: null, loading: false, error: '' });
   const [gitCopy, setGitCopy] = useState<string | null>(null);
@@ -294,7 +309,7 @@ function App() {
 
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
-      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || currentId || busy || editing || event.isComposing) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || currentId || busy || editing || event.isComposing) return;
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (event.key === 'Escape') { setSelected(''); return; }
@@ -311,7 +326,24 @@ function App() {
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, currentId, busy, editing]);
+  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, currentId, busy, editing]);
+
+  function openWorktrees() {
+    setWorktreeNote('');
+    setWorktreeBase('main');
+    setWorktreeInput('');
+    setWorktreeOpen(true);
+  }
+  async function copyWorktree(project: Project) {
+    const dirs = parseWorktreeInput(worktreeInput, baseName(project.path));
+    if (!dirs.length) { setWorktreeNote('请至少填写一个方向分支。'); return; }
+    try {
+      await navigator.clipboard.writeText(worktrees(project, worktreeBase.trim() || 'main', dirs));
+      setWorktreeNote('工作区词已复制，交给项目 Agent 执行。');
+    } catch {
+      setWorktreeNote('无法自动复制，请选中下方预览手动复制。');
+    }
+  }
 
   function openForm(project?: Project) {
     setForm(project ?? 'add'); setFormPath(project?.path ?? ''); setFormName(project?.name ?? ''); setFormError(''); setInstallSkill(true);
@@ -488,7 +520,7 @@ function App() {
             <p className={styles.skillDescription}>提供 Codex、OpenCode、Claude Code 和 TRAE 的项目入口。仅补充缺失文件，已有同名文件和项目规则保留。</p>
             {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{({ ready: '就绪', missing: '缺失', custom: '已有不同内容，未覆盖', error: '无法访问' })[file.state]}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
           </section>}
-          <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><div><button className={styles.textButton} onClick={() => openForm(current)}>修改路径</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(current)}>移出看板</button></div></footer>
+          <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><div><button className={styles.textButton} onClick={() => openForm(current)}>修改路径</button><button className={styles.textButton} disabled={busy} onClick={() => openWorktrees()}>建工作区</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(current)}>移出看板</button></div></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
       </> : <>
         <div className={styles.heading}><div><h1>项目</h1><p className={styles.subtitle}>{projects.length ? `${projects.filter(project => project.status === '进行中').length} 个进行中${oldCount ? ` · ${oldCount} 个待检查` : ''}` : '添加本地项目以开始跟踪'}</p></div><button className={styles.primary} onClick={() => openForm()}><Icon name="plus" />添加项目</button></div>
@@ -539,6 +571,18 @@ function App() {
       <div className={styles.dialogActions}>{handoffMode === 'close' && <button className={styles.secondary} disabled={busy} onClick={() => void refreshTransfer()}><Icon name="refresh" />已回写，刷新记录</button>}<button className={styles.primary} disabled={busy} onClick={() => void copy(handoffProject, handoffMode, criteria, goal, authors[handoffMode], transferFormat)}><Icon name="copy" />{busy ? '读取中…' : transferFormat === 'skill' ? '复制短指令' : handoffMode === 'close' ? '复制收工词' : '复制开工词'}</button></div>
     </div></Modal>}
     {summaryCopy !== null && <Modal title="复制交接摘要" close={() => setSummaryCopy(null)}><div className={styles.projectForm}><p>浏览器未允许自动复制，请选中下方原文后复制。</p><textarea autoFocus className={styles.handoff} aria-label="交接摘要原文" readOnly value={summaryCopy} onFocus={event => event.target.select()} /><div className={styles.dialogActions}><button className={styles.secondary} onClick={() => setSummaryCopy(null)}>关闭</button></div></div></Modal>}
+    {worktreeOpen && current && (() => {
+      const dirs = parseWorktreeInput(worktreeInput, baseName(current.path));
+      const prompt = dirs.length ? worktrees(current, worktreeBase.trim() || 'main', dirs) : '';
+      return <Modal title="创建工作区" close={() => setWorktreeOpen(false)}><div className={styles.projectForm}>
+        <p>生成一段交给项目 Agent 的指令，让它在仓库里创建 git worktree。案屿只生成词、不执行；建好后在「添加项目」里手动添加这些目录。</p>
+        <label>基准分支<input value={worktreeBase} maxLength={120} onChange={event => setWorktreeBase(event.target.value)} placeholder="main" /></label>
+        <label>方向 <span>每行一个分支，也可写「分支 | 目录名」</span><textarea className={styles.agentInput} value={worktreeInput} maxLength={2000} onChange={event => setWorktreeInput(event.target.value)} placeholder={worktreePlaceholder} /></label>
+        {worktreeNote && <p className={styles.transferNote} role="status">{worktreeNote}</p>}
+        <label>预览<textarea readOnly className={styles.handoff} value={prompt} onFocus={event => event.target.select()} /></label>
+        <div className={styles.dialogActions}><button className={styles.secondary} onClick={() => setWorktreeOpen(false)}>关闭</button><button className={styles.primary} disabled={busy || !dirs.length} onClick={() => void copyWorktree(current)}><Icon name="copy" />复制工作区词</button></div>
+      </div></Modal>;
+    })()}
     {gitCopy !== null && <Modal title="复制提交/推送命令" close={() => setGitCopy(null)}><div className={styles.projectForm}><p>浏览器未允许自动复制，请选中下方命令后复制，粘贴到终端自行运行。</p><textarea autoFocus className={styles.handoff} aria-label="提交/推送命令" readOnly value={gitCopy} onFocus={event => event.target.select()} /><div className={styles.dialogActions}><button className={styles.secondary} onClick={() => setGitCopy(null)}>关闭</button></div></div></Modal>}
   </div>;
 }
