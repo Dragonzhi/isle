@@ -23,6 +23,8 @@ export type Project = {
 export type Snapshot = { projects: Project[]; warnings: string[]; registryHash: string; agents: string[]; settingsHash: string | null };
 export type GitEntry = { hash: string; date: string; message: string };
 export type GitHistory = { available: boolean; reason?: string; entries: GitEntry[] };
+export type Workspace = { path: string; branch: string; head: string; registered: boolean; name: string; reason?: string };
+export type Workspaces = { available: boolean; reason?: string; entries: Workspace[] };
 export type SkillFile = { path: string; state: 'ready' | 'missing' | 'custom' | 'error'; message?: string };
 export type ProjectSkill = { state: 'ready' | 'missing' | 'partial' | 'custom' | 'error'; files: SkillFile[] };
 
@@ -96,8 +98,9 @@ ${commands}
 2. 用 git worktree add 创建目录，放在仓库的同级目录（..${sep}<目录名>）。
 3. 不切换、不移动当前主工作区的分支；不暂存、不提交、不合并、不推送。
 4. 创建后运行 git worktree list，逐条报告 worktree 的绝对路径与对应分支。
-5. 不要在各 worktree 里修改 TASKS.md；我会在案屿里手动添加这些目录，并分别整理每个方向的记录。
-6. 建完提醒我：每个 worktree 各自有一份 TASKS.md，合并方向分支时 next／updated／摘要／留痕等共享行可能冲突，需要手动收敛。`;
+5. 不要在各 worktree 里修改 TASKS.md；我会在案屿里手动添加这些目录，或从项目页“添加已有工作区”选择导入，再分别整理每个方向的记录。
+6. 建完提醒我三件事：每个 worktree 各自有一份 TASKS.md，合并方向分支时 next／updated／摘要／留痕等共享行可能冲突，需要手动收敛；每个目录要另开一个 Agent 会话、把工作目录切到该目录；被 Git 忽略的 Agent 配置与依赖（如 .agents／.claude／.trae、node_modules）不会跟着过去，需要在各自目录里单独准备或安装。
+7. 不要把会修改的技能、插件或运行数据链接回主目录。若有 Git 忽略的源码，报告其保存与合并方式；创建工作区不会自动隔离这些文件。`;
 }
 export function closeout(project: TransferProject, author = '') {
   return `项目：${project.name}

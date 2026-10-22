@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitHistory, Project, ProjectSkill, SkillFile, Snapshot } from '../shared/types.ts';
+import type { GitHistory, Project, ProjectSkill, SkillFile, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
 import { hash, parseTasks, template, updateRecord } from './tasks.ts';
 
 const runGit = promisify(execFile);
@@ -235,6 +235,48 @@ export class Store {
       if (/does not have any commits yet/i.test(stderr)) return { available: true, reason: '仓库还没有任何提交。', entries: [] };
       return { available: false, reason: stderr.split('\n')[0] || '无法读取 git 历史。', entries: [] };
     }
+  }
+
+  async workspaces(id: string): Promise<Workspaces> {
+    const registry = await this.registry();
+    const source = registry.entries.find(entry => entry.id === id);
+    if (!source) throw new AppError('项目不在清单中，请刷新。', 404);
+    const directory = await validateDirectory(source.path);
+    try { await fs.lstat(path.join(directory, '.git')); }
+    catch { return { available: false, reason: '这个目录自身不是 Git 仓库。', entries: [] }; }
+    try {
+      const { stdout } = await runGit('git', ['-c', 'gc.auto=0', '--no-optional-locks', '-C', directory, 'worktree', 'list', '--porcelain', '-z'], { timeout: 6000, maxBuffer: 1024 * 1024, windowsHide: true });
+      const entries: Workspace[] = [];
+      const group = await gitGroup(directory);
+      const rootName = registry.entries.find(entry => pathKey(entry.path) === pathKey(group?.group ?? directory))?.name ?? path.basename(group?.group ?? directory);
+      for (const record of String(stdout).split('\0\0').filter(Boolean)) {
+        const fields = record.split('\0');
+        const value = (key: string) => fields.find(field => field.startsWith(key + ' '))?.slice(key.length + 1) ?? '';
+        const location = value('worktree');
+        if (!location) continue;
+        const target = path.normalize(location);
+        const branch = value('branch').replace(/^refs\/heads\//, '');
+        const registered = registry.entries.find(entry => pathKey(entry.path) === pathKey(target));
+        let reason = fields.some(field => field === 'bare') ? '裸仓库没有工作目录' : fields.some(field => field === 'prunable' || field.startsWith('prunable ')) ? '工作区已失效，请先在 Git 中处理' : undefined;
+        if (!reason) {
+          try { await validateDirectory(target); }
+          catch (error) { reason = (error as Error).message; }
+        }
+        entries.push({ path: target, branch, head: value('HEAD'), registered: Boolean(registered), name: registered?.name ?? `${rootName} · ${branch || path.basename(target)}`, reason });
+      }
+      return { available: true, entries };
+    } catch (error) {
+      return { available: false, reason: code(error) === 'ENOENT' ? '未找到 Git，请先安装并加入 PATH。' : '无法读取工作区列表，请检查 Git 版本、目录权限或失效记录。', entries: [] };
+    }
+  }
+
+  async addWorkspace(id: string, input: { path: unknown; name?: unknown; registryHash?: unknown; installSkill?: unknown }) {
+    if (typeof input.path !== 'string') throw new AppError('请先选择一个工作区。');
+    const listed = await this.workspaces(id);
+    const selected = listed.entries.find(entry => pathKey(entry.path) === pathKey(path.normalize(input.path as string)));
+    if (!listed.available || !selected || selected.reason) throw new AppError('所选目录不是该项目当前可用的工作区，请重新读取列表。', 409);
+    if (selected.registered) throw new AppError('这个工作区已经加入看板。', 409);
+    return this.register({ ...input, path: selected.path, name: input.name ?? selected.name });
   }
 
   async settings() {

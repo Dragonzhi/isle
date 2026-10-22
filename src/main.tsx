@@ -1,6 +1,6 @@
-import React, { Fragment, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { GitHistory, Project, ProjectSkill, Snapshot, TaskState } from '../shared/types.ts';
+import type { GitHistory, Project, ProjectSkill, Snapshot, TaskState, Workspace, Workspaces } from '../shared/types.ts';
 import { closeout, focusTask, handoff, skillTransfer, worktrees } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
 import styles from './App.module.css';
@@ -97,6 +97,7 @@ function App() {
   const [worktreeBase, setWorktreeBase] = useState('main');
   const [worktreeInput, setWorktreeInput] = useState('');
   const [worktreeNote, setWorktreeNote] = useState('');
+  const [workspacePicker, setWorkspacePicker] = useState<{ project: Project; list: Workspaces | null; selected: string[]; names: Record<string, string>; installSkill: boolean; loading: boolean; error: string } | null>(null);
   const [summaryCopy, setSummaryCopy] = useState<string | null>(null);
   const [git, setGit] = useState<{ id: string; history: GitHistory | null; loading: boolean; error: string }>({ id: '', history: null, loading: false, error: '' });
   const [gitCopy, setGitCopy] = useState<string | null>(null);
@@ -144,6 +145,11 @@ function App() {
   const done = projects.filter(project => project.status === '已完成');
   const visible = projects.filter(project => (showDone || project.status !== '已完成') && (!onlyStale || stale(project)));
   const oldCount = projects.filter(stale).length;
+  const groupTotals = new Map<string, number>();
+  for (const project of projects) {
+    const key = project.group ?? 'project:' + project.id;
+    groupTotals.set(key, (groupTotals.get(key) ?? 0) + 1);
+  }
   const currentGroup = current?.group ? { label: groupLabel(projects, current.group), count: projects.filter(project => project.group === current.group).length, role: current.role } : null;
   const boardGroups = (() => {
     const buckets = new Map<string, Project[]>();
@@ -156,7 +162,8 @@ function App() {
       const sorted = [...members].sort((a, b) => Number(a.status === '已完成') - Number(b.status === '已完成') || Number(b.role === 'main') - Number(a.role === 'main') || b.updated.localeCompare(a.updated) || a.name.localeCompare(b.name, 'zh-CN'));
       const latest = members.reduce((max, project) => project.updated > max ? project.updated : max, '');
       const done = members.every(project => project.status === '已完成');
-      return { key, members: sorted, multi: members.length > 1, latest, done };
+      const total = groupTotals.get(key) ?? members.length;
+      return { key, members: sorted, multi: total > 1, total, latest, done };
     }).sort((a, b) => Number(a.done) - Number(b.done) || b.latest.localeCompare(a.latest));
   })();
   const navOrder = boardGroups.flatMap(group => group.members);
@@ -309,7 +316,7 @@ function App() {
 
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
-      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || currentId || busy || editing || event.isComposing) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || workspacePicker || currentId || busy || editing || event.isComposing) return;
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (event.key === 'Escape') { setSelected(''); return; }
@@ -326,7 +333,37 @@ function App() {
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, currentId, busy, editing]);
+  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, workspacePicker, currentId, busy, editing]);
+
+  async function openWorkspacePicker(project: Project) {
+    setWorkspacePicker({ project, list: null, selected: [], names: {}, installSkill: true, loading: true, error: '' });
+    try {
+      const list = await request('GET', `/${project.id}/workspaces`) as Workspaces;
+      setWorkspacePicker(previous => previous?.project.id === project.id ? { ...previous, list, names: Object.fromEntries(list.entries.map(entry => [entry.path, entry.name])), loading: false } : previous);
+    } catch (error) {
+      setWorkspacePicker(previous => previous?.project.id === project.id ? { ...previous, loading: false, error: (error as Error).message } : previous);
+    }
+  }
+  async function addSelectedWorkspaces() {
+    if (!workspacePicker || !data || busy || !workspacePicker.selected.length) return;
+    setBusy(true);
+    let snapshot = data;
+    const added: string[] = [];
+    try {
+      for (const target of workspacePicker.selected) {
+        snapshot = await api('POST', `/${workspacePicker.project.id}/workspaces`, { path: target, name: workspacePicker.names[target], registryHash: snapshot.registryHash, installSkill: workspacePicker.installSkill });
+        added.push(target);
+        accept(snapshot);
+      }
+      setWorkspacePicker(null);
+      setNotice({ message: `已添加 ${added.length} 个工作区；按所属项目自动分组。请分别核对方向任务与下一步。` });
+    } catch (error) {
+      const message = (error as Error).message;
+      const latest = await refresh();
+      const known = new Set((latest ?? snapshot).projects.map(project => project.path.toLowerCase()));
+      setWorkspacePicker(previous => previous ? { ...previous, selected: previous.selected.filter(target => !known.has(target.toLowerCase())), list: previous.list ? { ...previous.list, entries: previous.list.entries.map(entry => ({ ...entry, registered: known.has(entry.path.toLowerCase()) })) } : null, error: `${added.length ? `已添加 ${added.length} 个；` : ''}${message}。已添加的工作区会保留。` } : previous);
+    } finally { setBusy(false); }
+  }
 
   function openWorktrees() {
     setWorktreeNote('');
@@ -411,11 +448,13 @@ function App() {
     </div>;
   }
 
-  function boardCard(project: Project) {
+  function boardCard(project: Project, grouped = false) {
     const nameId = 'name-' + project.id;
-    return <li id={'project-' + project.id} aria-labelledby={nameId} tabIndex={0} key={project.id} onFocus={() => setSelected(project.id)} onMouseDown={() => setSelected(project.id)} className={[styles.projectCard, selected === project.id ? styles.selected : '', project.state !== 'ok' ? styles.unavailable : ''].filter(Boolean).join(' ')}>
+    const Name = grouped ? 'h3' : 'h2';
+    return <li id={'project-' + project.id} aria-labelledby={nameId} tabIndex={0} key={project.id} onFocus={() => setSelected(project.id)} onMouseDown={() => setSelected(project.id)} className={[styles.projectCard, grouped && project.role === 'main' ? styles.mainWorkspace : '', selected === project.id ? styles.selected : '', project.state !== 'ok' ? styles.unavailable : ''].filter(Boolean).join(' ')}>
+      {grouped && <p className={styles.workspaceRole}>{project.role === 'main' ? '主工作区' : '分线工作区'}</p>}
       <div className={styles.cardHeading}>
-        <h2 id={nameId} className={styles.projectName}>{project.state === 'offline' ? project.name : <a href={'#project/' + project.id} title={project.name}>{project.name}</a>}</h2>
+        <Name id={nameId} className={styles.projectName}>{project.state === 'offline' ? project.name : <a href={'#project/' + project.id} title={project.name}>{project.name}</a>}</Name>
         <span className={[styles.status, project.status === '暂停' ? styles.paused : ''].filter(Boolean).join(' ')}><span className={[styles.stateDot, project.status === '进行中' && project.state === 'ok' ? styles.green : ''].filter(Boolean).join(' ')} />{project.state === 'ok' ? project.status : project.state === 'offline' ? '离线' : '读取失败'}</span>
       </div>
       <p className={styles.cardPath} title={project.path}>{project.path}</p>
@@ -441,7 +480,7 @@ function App() {
     <aside className={styles.sidebar}>
       <a className={styles.brand} href="#"><span className={styles.brandMark}><Icon name="island" /></span><span>案屿<small>ISLE</small></span></a>
       <div className={styles.navLabel}>工作空间</div>
-      <a className={`${styles.navItem} ${!currentId ? styles.navActive : ''}`} href="#"><Icon name="island" />项目总览<span>{projects.length}</span></a>
+      <a className={`${styles.navItem} ${!currentId ? styles.navActive : ''}`} href="#"><Icon name="island" />项目总览<span>{groupTotals.size}</span></a>
       <button className={styles.agentNav} disabled={busy || Boolean(editing)} onClick={() => void openAgents()}>Agent 名单</button>
       <div className={styles.sidebarBottom}><small>v0.1</small></div>
     </aside>
@@ -451,7 +490,7 @@ function App() {
       {currentId ? <>
         <a className={styles.back} href="#">← 返回总览</a>
         {current ? <>
-          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p>{currentGroup && (currentGroup.count > 1 || currentGroup.role === 'worktree') && <p className={styles.groupMeta}>{currentGroup.role === 'main' ? '主线 · 共 ' + currentGroup.count + ' 条线' : currentGroup.label + ' · 工作区'}</p>}</div><div className={styles.transferActions}><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
+          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p>{currentGroup && (currentGroup.count > 1 || currentGroup.role === 'worktree') && <p className={styles.groupMeta}>{currentGroup.role === 'main' ? '主工作区 · 共 ' + currentGroup.count + ' 条线' : currentGroup.label + ' · 工作区'}</p>}</div><div className={styles.transferActions}><button className={styles.secondary} disabled={busy || Boolean(editing) || current.state !== 'ok'} onClick={() => void openWorkspacePicker(current)}>添加已有工作区</button><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
           <section className={styles.contextCard} aria-label="项目下一步">
             <div className={styles.contextMeta}><span className={styles.status}>{current.status}</span><span>{freshness(current)}</span></div>
             <p className={styles.fieldLabel}>下一步</p>
@@ -523,25 +562,25 @@ function App() {
           <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><div><button className={styles.textButton} onClick={() => openForm(current)}>修改路径</button><button className={styles.textButton} disabled={busy} onClick={() => openWorktrees()}>建工作区</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(current)}>移出看板</button></div></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
       </> : <>
-        <div className={styles.heading}><div><h1>项目</h1><p className={styles.subtitle}>{projects.length ? `${projects.filter(project => project.status === '进行中').length} 个进行中${oldCount ? ` · ${oldCount} 个待检查` : ''}` : '添加本地项目以开始跟踪'}</p></div><button className={styles.primary} onClick={() => openForm()}><Icon name="plus" />添加项目</button></div>
+        <div className={styles.heading}><div><h1>项目</h1><p className={styles.subtitle}>{projects.length ? `${groupTotals.size} 个项目 · ${projects.length} 个工作区${oldCount ? ` · ${oldCount} 个工作区待检查` : ''}` : '添加本地项目以开始跟踪'}</p></div><button className={styles.primary} onClick={() => openForm()}><Icon name="plus" />添加项目</button></div>
         {data?.warnings.length ? <details className={styles.warnings} open><summary>清单有 {data.warnings.length} 条提示</summary><ul>{data.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></details> : null}
         {loading && !data ? <p className={styles.emptyText}>正在读取项目…</p> : !projects.length ? <section className={styles.empty}>
           <div className={styles.emptyIsland}><Icon name="island" /></div><h2>暂无项目</h2><p>添加本地项目目录，案屿将读取其中的 TASKS.md。<br />若文件不存在，会自动创建模板。</p><button className={styles.primary} onClick={() => openForm()}><Icon name="plus" />添加项目</button>
         </section> : <>
-          <div className={styles.toolbar}><span>全部项目 <small>{visible.length}</small></span><div><label className={styles.filter}><input type="checkbox" checked={onlyStale} onChange={event => setOnlyStale(event.target.checked)} />只看久未更新</label><button className={styles.iconButton} aria-label="刷新项目" title="刷新" disabled={loading} onClick={() => void refresh()}><Icon name="refresh" /></button></div></div>
+          <div className={styles.toolbar}><span>{onlyStale ? '久未更新' : '全部项目'}<small>{boardGroups.length} 个项目 · {visible.length} 个工作区</small></span><div><label className={styles.filter}><input type="checkbox" checked={onlyStale} onChange={event => setOnlyStale(event.target.checked)} />只看久未更新</label><button className={styles.iconButton} aria-label="刷新项目" title="刷新" disabled={loading} onClick={() => void refresh()}><Icon name="refresh" /></button></div></div>
           <ul className={styles.projectGrid} role="list" aria-label="项目总览" data-render-ms={renderMs?.toFixed(1)}>
             {boardGroups.map(group => group.multi
-              ? <Fragment key={group.key}>
-                <li className={styles.groupHeader} aria-label={'分组 ' + groupLabel(projects, group.key) + '，' + group.members.length + ' 条线'}>
-                  <span className={styles.groupTitle} title={group.key}>{groupLabel(projects, group.key)}</span>
-                  <span className={styles.groupCount}>{group.members.length} 条线</span>
-                </li>
-                {group.members.map(project => boardCard(project))}
-              </Fragment>
+              ? <li className={styles.projectGroup} key={group.key} aria-labelledby={'group-' + group.members[0].id}>
+                <header className={styles.groupHeader}>
+                  <div><p className={styles.groupEyebrow}>项目</p><h2 id={'group-' + group.members[0].id} className={styles.groupTitle} title={group.key}>{groupLabel(projects, group.key)}</h2></div>
+                  <div className={styles.groupActions}><span className={styles.groupCount}>{group.members.length === group.total ? `${group.total} 个工作区` : `显示 ${group.members.length} / ${group.total} 个工作区`}</span><button className={styles.secondary} disabled={busy || Boolean(editing) || !group.members.some(project => project.state === 'ok')} onClick={() => void openWorkspacePicker(group.members.find(project => project.state === 'ok')!)}>添加已有工作区</button></div>
+                </header>
+                <ul className={styles.workspaceGrid} aria-label={groupLabel(projects, group.key) + '的工作区'}>{group.members.map(project => boardCard(project, true))}</ul>
+              </li>
               : group.members.map(project => boardCard(project)))}
           </ul>
           {!visible.length && <p className={styles.emptyText}>没有符合条件的项目。</p>}
-          {done.length > 0 && <button className={styles.doneToggle} onClick={() => setShowDone(!showDone)}>{showDone ? '▾' : '▸'} {done.length} 个已完成{showDone ? ' · 收起' : ' · 展开'}</button>}
+          {done.length > 0 && <button className={styles.doneToggle} onClick={() => setShowDone(!showDone)}>{showDone ? '▾' : '▸'} {done.length} 个已完成工作区{showDone ? ' · 收起' : ' · 展开'}</button>}
           <footer className={styles.listFooter}><span /><div><kbd>j</kbd><kbd>k</kbd> 移动 <kbd>↵</kbd> 查看 <kbd>c</kbd> 复制开工词</div></footer>
         </>}
       </>}
@@ -571,11 +610,25 @@ function App() {
       <div className={styles.dialogActions}>{handoffMode === 'close' && <button className={styles.secondary} disabled={busy} onClick={() => void refreshTransfer()}><Icon name="refresh" />已回写，刷新记录</button>}<button className={styles.primary} disabled={busy} onClick={() => void copy(handoffProject, handoffMode, criteria, goal, authors[handoffMode], transferFormat)}><Icon name="copy" />{busy ? '读取中…' : transferFormat === 'skill' ? '复制短指令' : handoffMode === 'close' ? '复制收工词' : '复制开工词'}</button></div>
     </div></Modal>}
     {summaryCopy !== null && <Modal title="复制交接摘要" close={() => setSummaryCopy(null)}><div className={styles.projectForm}><p>浏览器未允许自动复制，请选中下方原文后复制。</p><textarea autoFocus className={styles.handoff} aria-label="交接摘要原文" readOnly value={summaryCopy} onFocus={event => event.target.select()} /><div className={styles.dialogActions}><button className={styles.secondary} onClick={() => setSummaryCopy(null)}>关闭</button></div></div></Modal>}
+    {workspacePicker && <Modal title="添加已有工作区" close={() => { if (!busy) setWorkspacePicker(null); }}><div className={styles.projectForm}>
+      <p>只列出“{workspacePicker.project.name}”所属仓库的 Git 工作区。勾选后加入看板，各自保留 TASKS.md，并自动归入同一项目组。</p>
+      <p className={styles.skillDescription}>已有任务不会自动改写。加入后分别整理该方向的下一步与任务；Git 工作区也不会自动隔离链接到外部的技能、插件或运行数据。</p>
+      {workspacePicker.loading && <p role="status">正在读取工作区…</p>}
+      {workspacePicker.error && <p className={styles.formError} role="alert">{workspacePicker.error}</p>}
+      {workspacePicker.list && !workspacePicker.list.available && <p role="status">{workspacePicker.list.reason}</p>}
+      {workspacePicker.list?.available && <div className={styles.workspaceChoices}>{workspacePicker.list.entries.map((entry: Workspace) => <div className={styles.workspaceChoice} key={entry.path}>
+        <label className={styles.workspaceCheck}><input type="checkbox" checked={workspacePicker.selected.includes(entry.path)} disabled={busy || entry.registered || Boolean(entry.reason)} onChange={event => setWorkspacePicker({ ...workspacePicker, selected: event.target.checked ? [...workspacePicker.selected, entry.path] : workspacePicker.selected.filter(target => target !== entry.path) })} /><span>{entry.branch || '游离 HEAD'}<small>{entry.path}</small></span></label>
+        {entry.registered || entry.reason ? <span className={styles.skillDescription}>{entry.registered ? '已加入看板' : entry.reason}</span> : <label className={styles.workspaceName}>看板名称<input aria-label={`${entry.branch || entry.path}的看板名称`} value={workspacePicker.names[entry.path] ?? entry.name} maxLength={120} disabled={busy} onChange={event => setWorkspacePicker({ ...workspacePicker, names: { ...workspacePicker.names, [entry.path]: event.target.value } })} /></label>}
+      </div>)}</div>}
+      <label className={styles.skillInstallLabel}><input type="checkbox" checked={workspacePicker.installSkill} disabled={busy} onChange={event => setWorkspacePicker({ ...workspacePicker, installSkill: event.target.checked })} /><span>同时安装／补齐案屿 Skill<small>已有同名文件保留。</small></span></label>
+      <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setWorkspacePicker(null)}>取消</button><button className={styles.primary} disabled={busy || workspacePicker.loading || !workspacePicker.selected.length} onClick={() => void addSelectedWorkspaces()}>{busy ? '正在添加…' : `添加所选（${workspacePicker.selected.length}）`}</button></div>
+    </div></Modal>}
     {worktreeOpen && current && (() => {
       const dirs = parseWorktreeInput(worktreeInput, baseName(current.path));
       const prompt = dirs.length ? worktrees(current, worktreeBase.trim() || 'main', dirs) : '';
       return <Modal title="创建工作区" close={() => setWorktreeOpen(false)}><div className={styles.projectForm}>
-        <p>生成一段交给项目 Agent 的指令，让它在仓库里创建 git worktree。案屿只生成词、不执行；建好后在「添加项目」里手动添加这些目录。</p>
+        <p>生成一段交给项目 Agent 的指令，让它在仓库里创建 git worktree。案屿只生成词、不执行；建好后用「添加已有工作区」加入看板，可顺带装 Skill。</p>
+        <p className={styles.skillDescription}>Agent 配置与依赖（如 .agents、.claude、.trae、node_modules）不会跟着 worktree 复制；每个目录还要由你另开一个 Agent 会话，把工作目录切过去。</p>
         <label>基准分支<input value={worktreeBase} maxLength={120} onChange={event => setWorktreeBase(event.target.value)} placeholder="main" /></label>
         <label>方向 <span>每行一个分支，也可写「分支 | 目录名」</span><textarea className={styles.agentInput} value={worktreeInput} maxLength={2000} onChange={event => setWorktreeInput(event.target.value)} placeholder={worktreePlaceholder} /></label>
         {worktreeNote && <p className={styles.transferNote} role="status">{worktreeNote}</p>}
