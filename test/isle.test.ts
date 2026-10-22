@@ -630,4 +630,6 @@ test('worktree prompt is a copyable instruction that never executes anything', (
   assert.match(text, /git worktree list/);
   assert.match(text, /手动添加/);
   assert.match(text, /TASKS\.md/);
+  assert.match(text, /另开一个 Agent 会话/);
+  assert.match(text, /不会跟着过去/);
 });
