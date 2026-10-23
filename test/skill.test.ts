@@ -140,3 +140,39 @@ test('short instructions carry scope and caller choices, without embedding the w
   assert.ok(start.includes('检查交接是否一致') && start.includes('只读核对') && start.includes('署名：OpenCode'));
   assert.ok(skillTransfer(project, 'close').includes('先向我确认'));
 });
+
+test('published older versions are upgraded while user-edited files are never overwritten', async t => {
+  const { store, project } = await fixture(t);
+  const crypto = await import('node:crypto');
+  const sha = (data: Buffer) => crypto.createHash('sha256').update(data).digest('hex');
+  const old = Buffer.from('# 旧版通用规范\n\n按旧预算回写。\n');
+  const history = { skill: [sha(old)] };
+  const skillFile = path.join(project, '.agents/skills/isle/SKILL.md');
+  await fs.mkdir(path.dirname(skillFile), { recursive: true });
+  await fs.writeFile(skillFile, old);
+
+  assert.equal((await store.skillStatus(project, history)).state, 'outdated');
+  assert.equal((await store.ensureSkill(project, history)).state, 'ready');
+  assert.deepEqual(await fs.readFile(skillFile), await fs.readFile(new URL('../skills/isle/SKILL.md', import.meta.url)));
+
+  // Same history, but the file was edited: it belongs to the user and must stay untouched.
+  const edited = Buffer.from('# 旧版通用规范\n\n我自己加了一段。\n');
+  await fs.writeFile(skillFile, edited);
+  assert.equal((await store.skillStatus(project, history)).state, 'custom');
+  assert.equal((await store.ensureSkill(project, history)).state, 'custom');
+  assert.deepEqual(await fs.readFile(skillFile), edited);
+});
+
+test('published history is a valid read-only hash table that never lists the current template', async () => {
+  const raw = JSON.parse(await fs.readFile(new URL('../skills/isle/history.json', import.meta.url), 'utf8')) as Record<string, unknown>;
+  for (const key of ['skill', 'metadata', 'entry']) {
+    assert.ok(Array.isArray(raw[key]), key + ' must be an array');
+    const list = raw[key] as unknown[];
+    for (const item of list) assert.match(String(item), /^[a-f0-9]{64}$/);
+    assert.equal(new Set(list).size, list.length, key + ' has duplicates');
+  }
+  const crypto = await import('node:crypto');
+  const current = crypto.createHash('sha256').update(await fs.readFile(new URL('../skills/isle/SKILL.md', import.meta.url))).digest('hex');
+  assert.ok(!(raw.skill as string[]).includes(current));
+});
+
