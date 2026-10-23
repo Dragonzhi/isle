@@ -73,7 +73,7 @@ type TransferFormat = 'skill' | 'full';
 function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
   return format === 'skill' ? skillTransfer(project, mode, author, criteria, goal) : mode === 'close' ? closeout(project, author) : handoff(project, criteria, goal, author);
 }
-const skillLabels = { ready: '已就绪', missing: '尚未安装', partial: '部分入口待补齐', custom: '已有自定义同名 Skill', error: '无法安装或读取' };
+const skillLabels = { ready: '已就绪', missing: '尚未安装', partial: '部分入口待补齐', outdated: '有官方新版本，可升级', custom: '已有自定义同名 Skill', error: '无法安装或读取' };
 function App() {
   const [data, setData] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -279,7 +279,7 @@ function App() {
     try {
       const status = await request('POST', `/${project.id}/skill`, {}) as ProjectSkill;
       if (token === skillToken.current) setSkill({ id: project.id, status, loading: false, error: '' });
-      setNotice({ message: status.state === 'ready' ? '项目 Skill 已就绪，可以复制短指令。' : '未覆盖已有文件；请查看各入口的状态并核对。', error: status.state !== 'ready' });
+      setNotice({ message: status.state === 'ready' ? '项目 Skill 已就绪，可以复制短指令。' : status.state === 'outdated' ? '仍有官方旧版未能升级，请重试或查看各入口状态。' : '未覆盖已有文件；请查看各入口的状态并核对。', error: status.state !== 'ready' });
     } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
     finally { setBusy(false); }
   }
@@ -554,10 +554,10 @@ function App() {
             <p className={styles.gitHint}>只读预览最近的提交；提交与推送由你在终端执行，案屿不主动操作 git、不出网。</p>
           </section>}
           {current.state === 'ok' && <section className={styles.summaryCard} aria-label="项目 Skill">
-            <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.secondary} disabled={busy || skill.loading} onClick={() => void installProjectSkill(current)}>安装 / 补齐</button></div>
+            <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.secondary} disabled={busy || skill.loading} onClick={() => void installProjectSkill(current)}>{skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
             <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}。就绪后可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
-            <p className={styles.skillDescription}>提供 Codex、OpenCode、Claude Code 和 TRAE 的项目入口。仅补充缺失文件，已有同名文件和项目规则保留。</p>
-            {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{({ ready: '就绪', missing: '缺失', custom: '已有不同内容，未覆盖', error: '无法访问' })[file.state]}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
+            <p className={styles.skillDescription}>提供 Codex、OpenCode、Claude Code 和 TRAE 的项目入口。补充缺失文件，并把官方旧版升级到当前版本；官方旧版以外的同名文件（含你改过的）保留不覆盖。</p>
+            {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{({ ready: '就绪', missing: '缺失', outdated: '官方旧版，可升级', custom: '已有不同内容，未覆盖', error: '无法访问' })[file.state]}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
           </section>}
           <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><div><button className={styles.textButton} onClick={() => openForm(current)}>修改路径</button><button className={styles.textButton} disabled={busy} onClick={() => openWorktrees()}>建工作区</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(current)}>移出看板</button></div></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
@@ -592,7 +592,7 @@ function App() {
       <div className={styles.dialogActions}><button type="button" className={styles.secondary} disabled={busy} onClick={() => setAgentDraft(null)}>取消</button><button className={styles.primary} disabled={busy || agentDraft.hash === null}>{busy ? '保存中…' : '保存名单'}</button></div>
     </form></Modal>}
     {form && <Modal title={form === 'add' ? '添加项目' : '重新指向'} close={() => { if (!busy) setForm(null); }}><form onSubmit={register} className={styles.projectForm}><label>项目目录<input autoFocus required value={formPath} onChange={event => setFormPath(event.target.value)} placeholder={'D:\\work\\my-project'} disabled={busy} autoComplete="off" /></label><label>项目名称 <span>可选，留空使用目录名</span><input value={formName} maxLength={120} onChange={event => setFormName(event.target.value)} placeholder="例如：棱镜" disabled={busy} /></label>
-      <label className={styles.skillInstallLabel}><input type="checkbox" checked={installSkill} disabled={busy} onChange={event => setInstallSkill(event.target.checked)} /><span>安装项目级案屿 Skill<small>生成 .agents、.claude、.trae 的项目入口；已有同名文件不覆盖。</small></span></label>
+      <label className={styles.skillInstallLabel}><input type="checkbox" checked={installSkill} disabled={busy} onChange={event => setInstallSkill(event.target.checked)} /><span>安装项目级案屿 Skill<small>生成 .agents、.claude、.trae 的项目入口；官方旧版会升级，改过的同名文件不覆盖。</small></span></label>
       {formError && <p className={styles.formError} role="alert">{formError}</p>}<div className={styles.dialogActions}><button type="button" className={styles.secondary} disabled={busy} onClick={() => setForm(null)}>取消</button><button className={styles.primary} disabled={busy}>{busy ? '正在保存…' : form === 'add' ? '添加项目' : '保存'}</button></div></form></Modal>}
     {handoffProject && <Modal title={handoffMode === 'close' ? '收工回写' : '交给新 Agent'} close={() => setHandoffProject(null)}><div className={styles.projectForm}>
       <div className={styles.transferTabs} role="group" aria-label="交接阶段"><button disabled={busy} aria-pressed={handoffMode === 'close'} onClick={() => { setHandoffMode('close'); setTransferNote(''); }}>1 · 收工词</button><span>→</span><button disabled={busy} aria-pressed={handoffMode === 'start'} onClick={() => { setHandoffMode('start'); setTransferNote(''); }}>2 · 开工词</button></div>
@@ -620,7 +620,7 @@ function App() {
         <label className={styles.workspaceCheck}><input type="checkbox" checked={workspacePicker.selected.includes(entry.path)} disabled={busy || entry.registered || Boolean(entry.reason)} onChange={event => setWorkspacePicker({ ...workspacePicker, selected: event.target.checked ? [...workspacePicker.selected, entry.path] : workspacePicker.selected.filter(target => target !== entry.path) })} /><span>{entry.branch || '游离 HEAD'}<small>{entry.path}</small></span></label>
         {entry.registered || entry.reason ? <span className={styles.skillDescription}>{entry.registered ? '已加入看板' : entry.reason}</span> : <label className={styles.workspaceName}>看板名称<input aria-label={`${entry.branch || entry.path}的看板名称`} value={workspacePicker.names[entry.path] ?? entry.name} maxLength={120} disabled={busy} onChange={event => setWorkspacePicker({ ...workspacePicker, names: { ...workspacePicker.names, [entry.path]: event.target.value } })} /></label>}
       </div>)}</div>}
-      <label className={styles.skillInstallLabel}><input type="checkbox" checked={workspacePicker.installSkill} disabled={busy} onChange={event => setWorkspacePicker({ ...workspacePicker, installSkill: event.target.checked })} /><span>同时安装／补齐案屿 Skill<small>已有同名文件保留。</small></span></label>
+      <label className={styles.skillInstallLabel}><input type="checkbox" checked={workspacePicker.installSkill} disabled={busy} onChange={event => setWorkspacePicker({ ...workspacePicker, installSkill: event.target.checked })} /><span>同时安装／补齐案屿 Skill<small>官方旧版自动升级，改过的同名文件保留。</small></span></label>
       <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setWorkspacePicker(null)}>取消</button><button className={styles.primary} disabled={busy || workspacePicker.loading || !workspacePicker.selected.length} onClick={() => void addSelectedWorkspaces()}>{busy ? '正在添加…' : `添加所选（${workspacePicker.selected.length}）`}</button></div>
     </div></Modal>}
     {worktreeOpen && current && (() => {
