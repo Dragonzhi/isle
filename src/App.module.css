@@ -82,6 +82,7 @@
 .projectCard.unavailable { border-top-color: #c2c7b9; background: #f1f2eb; color: #7b8272; }
 .cardError { font-size: 12px; line-height: 1.8; color: #8c8270; overflow-wrap: anywhere; }
 .cardError p { margin: 0 0 8px; }
+.cardErrorActions { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
 .textButton { border: 0; padding: 4px 2px; background: none; color: #6c8060; font-size: 11px; white-space: nowrap; }
 .textButton:hover { color: #294b39; text-decoration: underline; }
 .doneToggle { color: #8c9482; background: none; border: 0; padding: 15px 12px; font-size: 11px; }
