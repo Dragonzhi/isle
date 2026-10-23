@@ -460,7 +460,7 @@ function App() {
       <p className={styles.cardPath} title={project.path}>{project.path}</p>
       <div className={styles.cardBody}>
         <p className={styles.cardLabel}>{project.state === 'ok' ? '下一步' : '需要检查'}</p>
-        {project.state === 'ok' ? nextEditor(project) : <div className={styles.cardError}><p>{project.error}</p><button className={styles.textButton} onClick={() => openForm(project)}>重新指向 →</button></div>}
+        {project.state === 'ok' ? nextEditor(project) : <div className={styles.cardError}><p>{project.error}</p><div className={styles.cardErrorActions}><button className={styles.textButton} onClick={() => openForm(project)}>重新指向 →</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(project)}>移出看板</button></div></div>}
       </div>
       <div className={styles.cardFooter}>
         <span className={[styles.freshness, stale(project) ? project.age >= 14 ? styles.overdue : styles.aging : ''].filter(Boolean).join(' ')} title={project.updated ? project.updated + (project.estimated ? ' (文件时间估值)' : '') : undefined}>{project.state === 'ok' ? '记录更新 · ' : ''}{freshness(project)}</span>
