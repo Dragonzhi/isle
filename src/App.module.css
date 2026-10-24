@@ -1591,7 +1591,7 @@
     inset 0 1px 0 rgba(255, 255, 255, .22),
     inset 0 -1px 0 rgba(0, 0, 0, .45);
 }
-.secondary, .quietButton, .smallButton, .miniButton, .transferTabs > button {
+.secondary, .quietButton, .smallButton, .miniButton, .transferTabs > button, .iconButtonBordered {
   background-image: linear-gradient(180deg, #fdfcf8, #f3f2ec);
   box-shadow: 0 3px 0 var(--line-dark), inset 0 1px 0 #fff;
 }
@@ -1609,10 +1609,9 @@
     inset 0 1px 0 rgba(255, 255, 255, .20),
     inset 0 -1px 0 rgba(0, 0, 0, .35);
 }
-.iconButtonBordered { box-shadow: 0 1px 0 var(--line); }
 .primary:disabled, .primaryButton:disabled, .handoffButton:disabled,
 .secondary:disabled, .quietButton:disabled, .smallButton:disabled, .miniButton:disabled,
-.transferTabs > button:disabled { background-image: none; box-shadow: none; transform: none; }
+.transferTabs > button:disabled, .iconButtonBordered:disabled { background-image: none; box-shadow: none; transform: none; }
 
 .primary, .secondary, .primaryButton, .handoffButton, .quietButton, .smallButton, .miniButton,
 .transferTabs > button, .iconButtonBordered, .textButton {
@@ -1641,7 +1640,7 @@
     inset 0 2px 5px rgba(0, 0, 0, .38),
     inset 0 1px 0 rgba(255, 255, 255, .08);
 }
-.iconButtonBordered:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 var(--line); }
+.iconButtonBordered:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 var(--line-dark); }
 
 @media (hover: hover) {
   .primary:hover:not(:disabled), .primaryButton:hover:not(:disabled), .handoffButton:hover:not(:disabled) {
@@ -1671,7 +1670,7 @@
       inset 0 1px 0 rgba(255, 255, 255, .22),
       inset 0 -1px 0 rgba(0, 0, 0, .35);
   }
-  .iconButtonBordered:hover:not(:disabled) { transform: translateY(-1px); }
+  .iconButtonBordered:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 0 var(--line-dark), 0 6px 13px rgba(29, 37, 34, .08); }
   .iconButtonBordered:hover:not(:disabled) svg { transform: rotate(180deg); }
   .iconButtonBordered svg { transition: transform var(--motion-slow) var(--ease-out); }
   .slip:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(29, 37, 34, .09); }
@@ -1791,7 +1790,8 @@
   border: 1px solid var(--line-dark);
   border-radius: var(--radius-control);
   background: var(--sheet);
-  box-shadow: 0 2px 0 var(--line-dark);
+  background-image: linear-gradient(180deg, #fdfcf8, #f3f2ec);
+  box-shadow: 0 3px 0 var(--line-dark), inset 0 1px 0 #fff;
   flex: none;
 }
 .viewButton {
@@ -1814,7 +1814,7 @@
 .viewButton:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 
 .moreWrap { position: relative; display: inline-flex; flex: none; }
-.moreActive { border-color: var(--ink); color: var(--ink); }
+.moreActive { border-color: var(--ink); color: var(--ink); box-shadow: 0 3px 0 var(--ink); }
 .moreDot {
   position: absolute;
   top: 4px;

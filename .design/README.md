@@ -21,7 +21,7 @@
 
 **2026-10-24 工作留痕排序：** 界面按日期倒序显示留痕，原文保持追加顺序；原文非单调时提示已校准，不自动改写文件。截图见 `screenshots/production-history-1440.png`。
 
-**2026-10-24 工具栏、卡片视图与折叠：** 「只看久未更新」移入 `···` 菜单；右侧新增列表/卡片图标切换（localStorage `isle.project-view`）；详情摘要/留痕/Git 默认收起，用 chevron 图标展开。截图见 `screenshots/production-view-cards-1440.png`、`production-more-menu-1440.png`、`production-collapsed-1440.png`。
+**2026-10-24 工具栏、卡片视图与折叠：** 「只看久未更新」移入 `···` 菜单；右侧新增列表/卡片图标切换（localStorage `isle.project-view`）；`···` 与刷新按钮统一为纸键；详情摘要/留痕/Git 默认收起，用 chevron 图标展开。截图见 `screenshots/production-view-cards-1440.png`、`production-more-menu-1440.png`、`production-collapsed-1440.png`。
 
 **2026-10-24 主按钮立体感：** 墨色主按钮补顶部棱边、3px 硬边、软投影与按下内阴影；截图见 `screenshots/production-header-actions-1440.png`、`production-primary-actions-1440.png`。
 
