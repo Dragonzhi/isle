@@ -203,3 +203,28 @@
 
 - 43 项测试、check、build 通过；
 - 生产构建中留痕日期为 10-24 → 10-17 的倒序；提示为「按日期倒序 · 原文顺序保留」；无控制台错误。
+
+## 工具栏、卡片视图与详情折叠（2026-10-24）
+
+用户反馈：
+
+> 这个按钮我觉得可以挪动到 ··· 的按钮到二级菜单，然后按钮边上加一个项目展示切换列表显示or卡片显示的按钮。都尽量用图标来显示。同时项目内的交接摘要、工作留痕、Git 历史 都改为默认收缩的可以展开的版本，展开按钮用图标表示。
+
+处理：
+
+- 「只看久未更新」从常驻复选框移入 `···` 菜单；菜单项为 `menuitemcheckbox`，带勾选状态；过滤开启时触发按钮右上角显示陶土红圆点。
+- 菜单支持打开聚焦、Escape 关闭并还焦、点击外部关闭、Tab 移出关闭；菜单打开时全局 `j/k/c` 快捷键让位。
+- 工具栏右侧改为「列表/卡片」双图标 segmented 切换 + `···` + 刷新；视图选择写入 `localStorage` 的 `isle.project-view`，默认列表。
+- 卡片视图复用交接单数据与动作：桌面两列，`<=1100px` 单列，移动端单列；状态章横排、下一步、子工作区、底部交接动作完整保留。
+- 详情页「交接摘要 / 工作留痕 / Git 历史」默认收起；标题右侧用 chevron 图标展开/收起，操作按钮在收起时隐藏。
+- 摘要手动编辑时禁用收起；展开内容带短淡入；留痕提示在收起时仍可见。
+- 全部新按钮都有 `aria-label` / `title`；菜单和分区使用 `aria-expanded` / `aria-controls` / `aria-checked`；动效在 reduced-motion 下关闭。
+
+验证：
+
+- `npm run check`、`npm test`（43 项）、`npm run build` 通过；
+- 生产构建：列表默认；卡片视图 1440 两列 `542px 542px`，390 单列 `354px`，320 单列 `284px`，均无横向溢出；
+- 菜单宽度 220px；过滤后 6 → 1 条，标签计数同步；Escape 关闭后焦点回到触发按钮；红点出现/消失；
+- 详情三区默认无内容且 `aria-expanded=false`；展开后摘要操作出现、留痕 10 条、Git 36 条；
+- 无控制台错误；可点目标无小于 24px。
+- 截图：`screenshots/production-toolbar-1440.png`、`production-view-cards-1440.png`、`production-view-cards-1024.png`、`production-view-cards-390.png`、`production-view-cards-320.png`、`production-more-menu-1440.png`、`production-filter-stale-1440.png`、`production-collapsed-1440.png`、`production-detail-expanded-1440.png`。

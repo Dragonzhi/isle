@@ -1736,3 +1736,126 @@
 @media (max-width: 360px) {
   .projectActions { grid-template-columns: 1fr; }
 }
+
+/* ═════════════════════════════════════════════════════════════
+   2026-10-24 · 工具栏视图、筛选菜单与详情折叠
+   ═════════════════════════════════════════════════════════════ */
+
+/* ── 工具栏控件 ── */
+.toolbarRight { gap: 8px; }
+.viewToggle {
+  display: inline-flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  box-shadow: 0 2px 0 var(--line-dark);
+  flex: none;
+}
+.viewButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 28px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color var(--motion) var(--ease-out), color var(--motion) var(--ease-out);
+}
+.viewButton:last-child { border-right: 0; }
+.viewButton svg { width: 16px; height: 16px; }
+.viewButton:hover:not([aria-pressed="true"]) { background: #ebe9e1; color: var(--ink); }
+.viewButton[aria-pressed="true"] { background: var(--ink); color: var(--sheet); }
+.viewButton:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+
+.moreWrap { position: relative; display: inline-flex; flex: none; }
+.moreActive { border-color: var(--ink); color: var(--ink); }
+.moreDot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--paper);
+  border-radius: 50%;
+  background: var(--rust);
+}
+.moreMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: min(220px, calc(100vw - 32px));
+  padding: 6px;
+  border: 1px solid var(--line-dark);
+  background: var(--sheet);
+  box-shadow: 0 18px 40px rgba(29, 37, 34, .16), 0 2px 0 var(--line-dark);
+  animation: isle-menu var(--motion) var(--ease-out);
+}
+.moreItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--fs-label);
+  text-align: left;
+  cursor: pointer;
+}
+.moreItem:hover { background: #eae8e0; color: var(--ink); }
+.moreItem[aria-checked="true"] { color: var(--ink); font-weight: 600; }
+.moreCheck { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; flex: none; border: 1px solid var(--line-dark); border-radius: 1px; background: var(--sheet); color: var(--ink); }
+.moreItem[aria-checked="true"] .moreCheck { border-color: var(--ink); background: var(--ink); color: var(--sheet); }
+@keyframes isle-menu { from { opacity: .6; transform: translateY(-3px) scale(.985); } to { opacity: 1; transform: none; } }
+
+/* ── 卡片视图 ── */
+.cardList { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
+.cardList > .slip { display: flex; flex-direction: column; }
+.cardList > .slip .stamp { display: flex; align-items: center; gap: 10px; padding: 16px 18px 0; }
+.cardList > .slip .stamp small { margin-top: 0; }
+.cardList > .slip .slipBody { flex: 1; padding: 8px 18px 14px; }
+.cardList > .slip .slipSide {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  border-left: 0;
+  border-top: 1px dashed var(--line-dark);
+}
+.cardList > .slip .slipTitle h2 { font-size: calc(var(--app-font) * 1.26); }
+.cardList > .slip .slipNext .nextButton { font-size: var(--fs-body); }
+.cardList > .slip .subRow { grid-template-columns: 8px minmax(120px, 150px) minmax(0, 1fr) 80px auto; gap: 10px; }
+
+/* ── 详情分区折叠 ── */
+.sectionHeadingActions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.sectionToggle { width: 30px; height: 30px; padding: 0; flex: none; }
+.sectionToggle svg { width: 16px; height: 16px; transform: rotate(90deg); transition: transform var(--motion) var(--ease-out); }
+.sectionToggle[aria-expanded="true"] svg { transform: rotate(-90deg); }
+.collapsedSection { padding-top: 16px; padding-bottom: 16px; }
+.collapsedSection .summaryHeading { margin-bottom: 0; }
+.sectionBody { animation: isle-fade var(--motion) var(--ease-out); }
+
+@media (max-width: 1100px) {
+  .cardList { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .toolbarRight { width: 100%; margin-left: 0; justify-content: flex-end; gap: 8px; }
+  .cardList > .slip .stamp { padding: 14px 16px 0; }
+  .cardList > .slip .slipBody { padding: 8px 16px 14px; }
+  .cardList > .slip .slipSide { padding: 10px 16px; }
+  .cardList > .slip .subRow { grid-template-columns: 8px minmax(0, 1fr) auto; gap: 4px 10px; }
+  .cardList > .slip .subNext { grid-column: 2 / -1; }
+  .cardList > .slip .subMeta { grid-column: 3; grid-row: 1; }
+  .cardList > .slip .subRow .miniButton { grid-column: 3; grid-row: 2; justify-self: end; }
+  .collapsedSection { padding-top: 14px; padding-bottom: 14px; }
+  .sectionHeadingActions { gap: 6px; }
+}

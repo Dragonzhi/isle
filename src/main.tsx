@@ -25,7 +25,7 @@ async function api(method = 'GET', suffix = '', input?: unknown, endpoint = '/ap
   return request(method, suffix, input, endpoint);
 }
 
-function Icon({ name, size = 18 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron'; size?: number }) {
+function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron' | 'list' | 'grid' | 'more' | 'check'; size?: number; strokeWidth?: number }) {
   const paths = {
     plus: 'M12 5v14M5 12h14', copy: 'M9 9h11v11H9zM15 9V4H4v11h5',
     arrow: 'M5 12h14m-6-6 6 6-6 6', refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12 0l2 5M4 12l2 5a7 7 0 0 0 12 0',
@@ -35,8 +35,12 @@ function Icon({ name, size = 18 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh'
     trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6',
     people: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
     chevron: 'm9 18 6-6-6-6',
+    list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+    grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
+    more: 'M5 12h.01M12 12h.01M19 12h.01',
+    check: 'M20 6 9 17l-5-5',
   };
-  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
 
 function Modal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
@@ -77,9 +81,12 @@ function parseWorktreeInput(text: string, repoName: string) {
 type Editing = { id: string; kind: 'next' | 'summary'; value: string; hash: string; baseline: string; conflict?: boolean; reviewed?: boolean };
 type TransferFormat = 'skill' | 'full';
 type ProjectFilter = 'all' | 'active' | 'paused' | 'offline';
+type ProjectView = 'list' | 'cards';
+type DetailSection = 'summary' | 'history' | 'git';
 type TextSize = 'standard' | 'large' | 'xlarge';
 type BoardGroup = { key: string; members: Project[]; multi: boolean; total: number; latest: string; done: boolean };
 const TEXT_SIZE_KEY = 'isle.text-size';
+const PROJECT_VIEW_KEY = 'isle.project-view';
 const textSizeOptions: { value: TextSize; label: string; px: string }[] = [
   { value: 'standard', label: '标准', px: '17.5px' },
   { value: 'large', label: '大', px: '19px' },
@@ -90,6 +97,10 @@ function readTextSize(): TextSize {
     const saved = localStorage.getItem(TEXT_SIZE_KEY);
     return saved === 'large' || saved === 'xlarge' ? saved : 'standard';
   } catch { return 'standard'; }
+}
+function readProjectView(): ProjectView {
+  try { return localStorage.getItem(PROJECT_VIEW_KEY) === 'cards' ? 'cards' : 'list'; }
+  catch { return 'list'; }
 }
 function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
   return format === 'skill' ? skillTransfer(project, mode, author, criteria, goal) : mode === 'close' ? closeout(project, author) : handoff(project, criteria, goal, author);
@@ -105,6 +116,9 @@ function App() {
   const [filter, setFilter] = useState<ProjectFilter>('all');
   const [textSize, setTextSize] = useState<TextSize>(readTextSize);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [view, setView] = useState<ProjectView>(readProjectView);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<Record<DetailSection, boolean>>({ summary: false, history: false, git: false });
   const [selected, setSelected] = useState('');
   const [editing, setEditing] = useState<Editing | null>(null);
   const [form, setForm] = useState<'add' | Project | null>(null);
@@ -138,6 +152,9 @@ function App() {
   const summaryInput = useRef<HTMLTextAreaElement>(null);
   const gitToken = useRef(0);
   const skillToken = useRef(0);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const moreItemRef = useRef<HTMLButtonElement>(null);
 
   const accept = (snapshot: Snapshot) => { arrival.current = performance.now(); setData(snapshot); };
   async function refresh() {
@@ -166,6 +183,9 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem(TEXT_SIZE_KEY, textSize); } catch { /* 隐私模式或存储不可用时只影响本次会话。 */ }
   }, [textSize]);
+  useEffect(() => {
+    try { localStorage.setItem(PROJECT_VIEW_KEY, view); } catch { /* 隐私模式或存储不可用时只影响本次会话。 */ }
+  }, [view]);
 
   const projects = data?.projects ?? [];
   const currentId = route.startsWith('#project/') ? route.slice(9) : '';
@@ -202,6 +222,29 @@ function App() {
       ? 'TASKS.md 原文顺序与日期不一致，界面已按日期倒序显示；原文未改。'
       : '界面按日期倒序显示；TASKS.md 原文保留原顺序。'
     : '按文件追加顺序显示。';
+  useEffect(() => {
+    setOpenSections({ summary: false, history: false, git: false });
+    setMoreOpen(false);
+  }, [current?.id]);
+  useEffect(() => {
+    if (!moreOpen) return;
+    moreItemRef.current?.focus();
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!moreMenuRef.current?.contains(target) && !moreButtonRef.current?.contains(target)) setMoreOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setMoreOpen(false);
+      moreButtonRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [moreOpen]);
   const boardGroups = (() => {
     const buckets = new Map<string, Project[]>();
     for (const project of visible) {
@@ -367,7 +410,7 @@ function App() {
 
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
-      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || workspacePicker || settingsOpen || currentId || busy || editing || event.isComposing) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || workspacePicker || settingsOpen || moreOpen || currentId || busy || editing || event.isComposing) return;
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (event.key === 'Escape') { setSelected(''); return; }
@@ -384,7 +427,7 @@ function App() {
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, workspacePicker, settingsOpen, currentId, busy, editing]);
+  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, workspacePicker, settingsOpen, moreOpen, currentId, busy, editing]);
 
   async function openWorkspacePicker(project: Project) {
     setWorkspacePicker({ project, list: null, selected: [], names: {}, installSkill: true, loading: true, error: '' });
@@ -520,6 +563,7 @@ function App() {
     return project.status;
   }
   function stampDate(project: Project) { return /^\d{4}-\d{2}-\d{2}$/.test(project.updated) ? project.updated.slice(5) : '—'; }
+  function toggleSection(key: DetailSection) { setOpenSections(previous => ({ ...previous, [key]: !previous[key] })); }
   function openProject(project: Project, event: React.MouseEvent) {
     if ((event.target as HTMLElement).closest('a, button, input, textarea, select, summary, label')) return;
     location.hash = 'project/' + project.id;
@@ -691,29 +735,53 @@ function App() {
               })}</ul>
             </Group>;
           })}</div>{!current.tasks.length && <p className={styles.noTasks}>暂无任务</p>}</section>}
-          {current.state === 'ok' && <section className={styles.summaryCard} aria-label="交接摘要">
-            <div className={styles.summaryHeading}><h2>交接摘要</h2><div className={styles.transferActions}><button className={styles.quietButton} disabled={busy || Boolean(editing) || !current.summary?.trim()} onClick={() => void copySummary(current)}><Icon name="copy" size={14} />复制摘要</button><button className={styles.quietButton} disabled={busy || Boolean(editing)} onClick={() => startEdit(current, 'summary')}><Icon name="edit" size={14} />手动补记</button></div></div>
-            {editing?.id === current.id && editing.kind === 'summary' ? <form onSubmit={saveNext}>
-              <label className={styles.srOnly} htmlFor="summary-input">编辑交接摘要</label>
-              <textarea id="summary-input" ref={summaryInput} className={styles.summaryInput} value={editing.value} maxLength={10000} disabled={busy} placeholder={'已确认：\n验证结果：\n未完成或阻塞：\n接着做：'} onChange={event => setEditing({ ...editing, value: event.target.value })} onKeyDown={event => { if (event.key === 'Escape' && !busy) setEditing(null); }} />
-              {editing.conflict && <button type="button" className={styles.conflict} onClick={() => void reviewConflict()}>文件已变更，保留输入并核对最新内容</button>}
-              {editing.reviewed && <div className={styles.comparison}>文件中的最新摘要：<pre>{editing.baseline || '（空）'}</pre>上方保留了你的输入，确认后可保存。</div>}
-              <div className={styles.dialogActions}><button type="button" className={styles.secondary} disabled={busy} onClick={() => setEditing(null)}>取消</button><button className={styles.primary} disabled={busy || editing.conflict}>保存摘要</button></div>
-            </form> : current.summary ? <div className={styles.markdown}><SummaryMarkdown text={current.summary} /></div> : <p className={styles.summaryEmpty}>收工时，把收工词发给当前 Agent，回写后刷新。也可以在这里手动补记。</p>}
+          {current.state === 'ok' && <section className={`${styles.summaryCard} ${!openSections.summary ? styles.collapsedSection : ''}`} aria-label="交接摘要">
+            <div className={styles.summaryHeading}>
+              <h2>交接摘要</h2>
+              <div className={styles.sectionHeadingActions}>
+                {openSections.summary && <div className={styles.transferActions}><button className={styles.quietButton} disabled={busy || Boolean(editing) || !current.summary?.trim()} onClick={() => void copySummary(current)}><Icon name="copy" size={14} />复制摘要</button><button className={styles.quietButton} disabled={busy || Boolean(editing)} onClick={() => startEdit(current, 'summary')}><Icon name="edit" size={14} />手动补记</button></div>}
+                <button className={`${styles.quietButton} ${styles.sectionToggle}`} aria-expanded={openSections.summary} aria-controls="summary-content" aria-label={openSections.summary ? '收起交接摘要' : '展开交接摘要'} title={openSections.summary ? '收起交接摘要' : '展开交接摘要'} disabled={editing?.id === current.id && editing.kind === 'summary'} onClick={() => toggleSection('summary')}><Icon name="chevron" size={16} /></button>
+              </div>
+            </div>
+            {openSections.summary && <div id="summary-content" className={styles.sectionBody}>
+              {editing?.id === current.id && editing.kind === 'summary' ? <form onSubmit={saveNext}>
+                <label className={styles.srOnly} htmlFor="summary-input">编辑交接摘要</label>
+                <textarea id="summary-input" ref={summaryInput} className={styles.summaryInput} value={editing.value} maxLength={10000} disabled={busy} placeholder={'已确认：\n验证结果：\n未完成或阻塞：\n接着做：'} onChange={event => setEditing({ ...editing, value: event.target.value })} onKeyDown={event => { if (event.key === 'Escape' && !busy) setEditing(null); }} />
+                {editing.conflict && <button type="button" className={styles.conflict} onClick={() => void reviewConflict()}>文件已变更，保留输入并核对最新内容</button>}
+                {editing.reviewed && <div className={styles.comparison}>文件中的最新摘要：<pre>{editing.baseline || '（空）'}</pre>上方保留了你的输入，确认后可保存。</div>}
+                <div className={styles.dialogActions}><button type="button" className={styles.secondary} disabled={busy} onClick={() => setEditing(null)}>取消</button><button className={styles.primary} disabled={busy || editing.conflict}>保存摘要</button></div>
+              </form> : current.summary ? <div className={styles.markdown}><SummaryMarkdown text={current.summary} /></div> : <p className={styles.summaryEmpty}>收工时，把收工词发给当前 Agent，回写后刷新。也可以在这里手动补记。</p>}
+            </div>}
           </section>}
-          {current.state === 'ok' && <section className={`${styles.summaryCard} ${styles.historyCard}`} aria-label="工作留痕">
-            <div className={styles.summaryHeading}><h2>工作留痕</h2><span className={`${styles.historyHint} ${historyView?.outOfOrder ? styles.historyAdjusted : ''}`.trim()} title={historyHintTitle}>{historyHint}</span></div>
-            {current.history ? <div className={styles.markdown}><SummaryMarkdown text={historyView?.text ?? current.history} /></div> : <p className={styles.summaryEmpty}>暂无留痕。收工时选择署名，让 Agent 追加本次推进和验证结果；未完成的工作也可以记录。</p>}
+          {current.state === 'ok' && <section className={`${styles.summaryCard} ${styles.historyCard} ${!openSections.history ? styles.collapsedSection : ''}`} aria-label="工作留痕">
+            <div className={styles.summaryHeading}>
+              <h2>工作留痕</h2>
+              <div className={styles.sectionHeadingActions}>
+                <span className={`${styles.historyHint} ${historyView?.outOfOrder ? styles.historyAdjusted : ''}`.trim()} title={historyHintTitle}>{historyHint}</span>
+                <button className={`${styles.quietButton} ${styles.sectionToggle}`} aria-expanded={openSections.history} aria-controls="history-content" aria-label={openSections.history ? '收起工作留痕' : '展开工作留痕'} title={openSections.history ? '收起工作留痕' : '展开工作留痕'} onClick={() => toggleSection('history')}><Icon name="chevron" size={16} /></button>
+              </div>
+            </div>
+            {openSections.history && <div id="history-content" className={styles.sectionBody}>
+              {current.history ? <div className={styles.markdown}><SummaryMarkdown text={historyView?.text ?? current.history} /></div> : <p className={styles.summaryEmpty}>暂无留痕。收工时选择署名，让 Agent 追加本次推进和验证结果；未完成的工作也可以记录。</p>}
+            </div>}
           </section>}
-          {current.state === 'ok' && git.id === current.id && <section className={styles.gitCard} aria-label="Git 历史">
-            <div className={styles.summaryHeading}><h2>Git 历史</h2><div className={styles.transferActions}><button className={styles.quietButton} disabled={busy || git.loading} onClick={() => void loadGit(current)}><Icon name="refresh" size={14} />刷新</button><button className={styles.quietButton} disabled={busy} onClick={() => void copyGit(current)}><Icon name="copy" size={14} />复制提交/推送命令</button></div></div>
-            {git.loading && <p className={styles.summaryEmpty}>正在读取 git 历史…</p>}
-            {!git.loading && git.error && <p className={styles.summaryEmpty}>{git.error}</p>}
-            {!git.loading && git.history && !git.history.available && <p className={styles.summaryEmpty}>{git.history.reason || '无法读取 git 历史。'}</p>}
-            {!git.loading && git.history && git.history.available && (git.history.entries.length
-              ? <ul className={styles.gitList}>{git.history.entries.map((entry, index) => <li key={index}><code className={styles.gitHash}>{entry.hash}</code><time className={styles.gitDate}>{entry.date}</time><span className={styles.gitMessage}>{entry.message}</span></li>)}</ul>
-              : <p className={styles.summaryEmpty}>{git.history.reason || '暂无提交。'}</p>)}
-            <p className={styles.gitHint}>只读预览最近的提交；提交与推送由你在终端执行，案屿不主动操作 git、不出网。</p>
+          {current.state === 'ok' && git.id === current.id && <section className={`${styles.gitCard} ${!openSections.git ? styles.collapsedSection : ''}`} aria-label="Git 历史">
+            <div className={styles.summaryHeading}>
+              <h2>Git 历史</h2>
+              <div className={styles.sectionHeadingActions}>
+                {openSections.git && <div className={styles.transferActions}><button className={styles.quietButton} disabled={busy || git.loading} onClick={() => void loadGit(current)}><Icon name="refresh" size={14} />刷新</button><button className={styles.quietButton} disabled={busy} onClick={() => void copyGit(current)}><Icon name="copy" size={14} />复制提交/推送命令</button></div>}
+                <button className={`${styles.quietButton} ${styles.sectionToggle}`} aria-expanded={openSections.git} aria-controls="git-content" aria-label={openSections.git ? '收起 Git 历史' : '展开 Git 历史'} title={openSections.git ? '收起 Git 历史' : '展开 Git 历史'} onClick={() => toggleSection('git')}><Icon name="chevron" size={16} /></button>
+              </div>
+            </div>
+            {openSections.git && <div id="git-content" className={styles.sectionBody}>
+              {git.loading && <p className={styles.summaryEmpty}>正在读取 git 历史…</p>}
+              {!git.loading && git.error && <p className={styles.summaryEmpty}>{git.error}</p>}
+              {!git.loading && git.history && !git.history.available && <p className={styles.summaryEmpty}>{git.history.reason || '无法读取 git 历史。'}</p>}
+              {!git.loading && git.history && git.history.available && (git.history.entries.length
+                ? <ul className={styles.gitList}>{git.history.entries.map((entry, index) => <li key={index}><code className={styles.gitHash}>{entry.hash}</code><time className={styles.gitDate}>{entry.date}</time><span className={styles.gitMessage}>{entry.message}</span></li>)}</ul>
+                : <p className={styles.summaryEmpty}>{git.history.reason || '暂无提交。'}</p>)}
+              <p className={styles.gitHint}>只读预览最近的提交；提交与推送由你在终端执行，案屿不主动操作 git、不出网。</p>
+            </div>}
           </section>}
           {current.state === 'ok' && <section className={styles.summaryCard} aria-label="项目 Skill">
             <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void (skill.status?.state === 'ready' ? loadSkill(current) : installProjectSkill(current))}><Icon name="refresh" size={14} />{skill.status?.state === 'ready' ? '重新检查' : skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
@@ -731,7 +799,44 @@ function App() {
             ))}
           </nav>
           <div className={styles.toolbarRight}>
-            <label className={styles.filter}><input type="checkbox" checked={onlyStale} onChange={event => setOnlyStale(event.target.checked)} />只看久未更新</label>
+            <div className={styles.viewToggle} role="group" aria-label="项目展示方式">
+              <button className={styles.viewButton} aria-pressed={view === 'list'} aria-label="列表显示" title="列表显示" onClick={() => { setView('list'); setMoreOpen(false); }}><Icon name="list" size={16} /></button>
+              <button className={styles.viewButton} aria-pressed={view === 'cards'} aria-label="卡片显示" title="卡片显示" onClick={() => { setView('cards'); setMoreOpen(false); }}><Icon name="grid" size={16} /></button>
+            </div>
+            <div className={styles.moreWrap}>
+              <button
+                ref={moreButtonRef}
+                className={`${styles.iconButton} ${styles.iconButtonBordered} ${onlyStale ? styles.moreActive : ''}`.trim()}
+                aria-label={onlyStale ? '更多筛选，已启用只看久未更新' : '更多筛选'}
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+                aria-controls="project-filter-menu"
+                title="更多筛选"
+                onClick={() => setMoreOpen(open => !open)}
+              >
+                <Icon name="more" strokeWidth={2.4} />
+                {onlyStale && <span className={styles.moreDot} aria-hidden="true" />}
+              </button>
+              {moreOpen && <div
+                ref={moreMenuRef}
+                id="project-filter-menu"
+                className={styles.moreMenu}
+                role="menu"
+                aria-label="更多筛选"
+                onBlur={event => { const next = event.relatedTarget as Node | null; if (!next || (!moreMenuRef.current?.contains(next) && !moreButtonRef.current?.contains(next))) setMoreOpen(false); }}
+              >
+                <button
+                  ref={moreItemRef}
+                  className={styles.moreItem}
+                  role="menuitemcheckbox"
+                  aria-checked={onlyStale}
+                  onClick={() => { setOnlyStale(value => !value); setMoreOpen(false); moreButtonRef.current?.focus(); }}
+                >
+                  <span className={styles.moreCheck} aria-hidden="true">{onlyStale && <Icon name="check" size={15} />}</span>
+                  <span>只看久未更新</span>
+                </button>
+              </div>}
+            </div>
             <button className={`${styles.iconButton} ${styles.iconButtonBordered}`} aria-label="刷新项目" title="刷新" disabled={loading} onClick={() => void refresh()}><Icon name="refresh" /></button>
           </div>
         </div>
@@ -739,7 +844,7 @@ function App() {
         {loading && !data ? <p className={styles.emptyText}>正在读取项目…</p> : !projects.length ? <section className={styles.empty}>
           <div className={styles.emptyIsland}><Icon name="island" /></div><h2>暂无项目</h2><p>添加本地项目目录，案屿将读取其中的 TASKS.md。<br />若文件不存在，会自动创建模板。</p><button className={styles.primary} onClick={() => openForm()}><Icon name="plus" />添加项目</button>
         </section> : <>
-          {boardGroups.length > 0 && <div className={styles.slipList} role="list" aria-label="项目总览" data-render-ms={renderMs?.toFixed(1)}>{boardGroups.map(slipCard)}</div>}
+          {boardGroups.length > 0 && <div key={view} className={`${styles.slipList} ${view === 'cards' ? styles.cardList : ''}`.trim()} role="list" aria-label="项目总览" data-render-ms={renderMs?.toFixed(1)}>{boardGroups.map(slipCard)}</div>}
           {!visible.length && <p className={styles.emptyText}>没有符合条件的项目。</p>}
           {done.length > 0 && <button className={styles.doneToggle} onClick={() => setShowDone(!showDone)}>{showDone ? '▾' : '▸'} {done.length} 个已完成工作区{showDone ? ' / 收起' : ' / 展开'}</button>}
           <footer className={styles.listFooter}><span>记录保存在各项目的 TASKS.md</span><div><kbd>j</kbd><kbd>k</kbd> 移动 <kbd>↵</kbd> 查看 <kbd>c</kbd> 复制开工词</div></footer>

@@ -21,6 +21,8 @@
 
 **2026-10-24 工作留痕排序：** 界面按日期倒序显示留痕，原文保持追加顺序；原文非单调时提示已校准，不自动改写文件。截图见 `screenshots/production-history-1440.png`。
 
+**2026-10-24 工具栏、卡片视图与折叠：** 「只看久未更新」移入 `···` 菜单；右侧新增列表/卡片图标切换（localStorage `isle.project-view`）；详情摘要/留痕/Git 默认收起，用 chevron 图标展开。截图见 `screenshots/production-view-cards-1440.png`、`production-more-menu-1440.png`、`production-collapsed-1440.png`。
+
 打开 `index.html` 看选择页，或直接打开下面三个单文件。每个文件都可以切换项目、打开“交接”弹窗；其余未接入的流程只给诚实提示。
 
 ## 三个方向
