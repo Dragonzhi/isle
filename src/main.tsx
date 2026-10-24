@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import type { GitHistory, Project, ProjectSkill, Snapshot, TaskState, Workspace, Workspaces } from '../shared/types.ts';
 import { closeout, focusTask, handoff, skillTransfer, worktrees } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
+import { orderHistory } from './history.ts';
 import styles from './App.module.css';
 
 class RequestError extends Error {
@@ -192,6 +193,15 @@ function App() {
     groupTotals.set(key, (groupTotals.get(key) ?? 0) + 1);
   }
   const currentGroup = current?.group ? { label: groupLabel(projects, current.group), count: projects.filter(project => project.group === current.group).length, role: current.role } : null;
+  const historyView = current?.history ? orderHistory(current.history) : null;
+  const historyHint = historyView?.parsed
+    ? historyView.outOfOrder ? '按日期倒序 · 文件顺序已校准' : '按日期倒序 · 原文顺序保留'
+    : '按次追加 · Agent 自述';
+  const historyHintTitle = historyView?.parsed
+    ? historyView.outOfOrder
+      ? 'TASKS.md 原文顺序与日期不一致，界面已按日期倒序显示；原文未改。'
+      : '界面按日期倒序显示；TASKS.md 原文保留原顺序。'
+    : '按文件追加顺序显示。';
   const boardGroups = (() => {
     const buckets = new Map<string, Project[]>();
     for (const project of visible) {
@@ -692,8 +702,8 @@ function App() {
             </form> : current.summary ? <div className={styles.markdown}><SummaryMarkdown text={current.summary} /></div> : <p className={styles.summaryEmpty}>收工时，把收工词发给当前 Agent，回写后刷新。也可以在这里手动补记。</p>}
           </section>}
           {current.state === 'ok' && <section className={`${styles.summaryCard} ${styles.historyCard}`} aria-label="工作留痕">
-            <div className={styles.summaryHeading}><h2>工作留痕</h2><span className={styles.historyHint}>按次追加 · Agent 自述</span></div>
-            {current.history ? <div className={styles.markdown}><SummaryMarkdown text={current.history} /></div> : <p className={styles.summaryEmpty}>暂无留痕。收工时选择署名，让 Agent 追加本次推进和验证结果；未完成的工作也可以记录。</p>}
+            <div className={styles.summaryHeading}><h2>工作留痕</h2><span className={`${styles.historyHint} ${historyView?.outOfOrder ? styles.historyAdjusted : ''}`.trim()} title={historyHintTitle}>{historyHint}</span></div>
+            {current.history ? <div className={styles.markdown}><SummaryMarkdown text={historyView?.text ?? current.history} /></div> : <p className={styles.summaryEmpty}>暂无留痕。收工时选择署名，让 Agent 追加本次推进和验证结果；未完成的工作也可以记录。</p>}
           </section>}
           {current.state === 'ok' && git.id === current.id && <section className={styles.gitCard} aria-label="Git 历史">
             <div className={styles.summaryHeading}><h2>Git 历史</h2><div className={styles.transferActions}><button className={styles.quietButton} disabled={busy || git.loading} onClick={() => void loadGit(current)}><Icon name="refresh" size={14} />刷新</button><button className={styles.quietButton} disabled={busy} onClick={() => void copyGit(current)}><Icon name="copy" size={14} />复制提交/推送命令</button></div></div>

@@ -812,6 +812,7 @@
 .summaryHeading .textButton { display: inline-flex; align-items: center; gap: 5px; }
 .historyHint { color: var(--muted); font-size: 12px; }
 .projectPage .historyHint { color: var(--muted); font-size: 12px; }
+.historyAdjusted { color: var(--olive); }
 .markdown, .projectPage .markdown {
   max-height: none;
   overflow: visible;
