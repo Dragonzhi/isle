@@ -17,6 +17,8 @@
 
 **2026-10-24 字号设置与动效：** 默认基础字号提到 17.5px，新增 `Aa` 显示设置（标准 17.5 / 大 19 / 特大 20.5，localStorage 持久化）；按钮改为纸键硬边 + 上浮/按下，Tab 下划线、卡片入场、弹窗与 notice 补了短动效。截图见 `screenshots/production-settings-standard-1440.png`、`production-settings-large-1440.png`、`production-settings-390.png`、`production-xlarge-320.png`。
 
+**2026-10-24 面包屑按钮：** 详情页「← 项目交接单」从小号文字链接改为纸键按钮，保留面包屑语义；截图见 `screenshots/production-detail-top-1440.png`。
+
 打开 `index.html` 看选择页，或直接打开下面三个单文件。每个文件都可以切换项目、打开“交接”弹窗；其余未接入的流程只给诚实提示。
 
 ## 三个方向

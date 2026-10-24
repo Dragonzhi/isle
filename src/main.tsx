@@ -589,13 +589,13 @@ function App() {
   const date = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()]}`;
   return <div className={styles.app} data-text-size={textSize}>
     <header className={`${styles.siteHeader} ${currentId ? styles.siteHeaderCompact : ''}`}>
-      <a className={styles.brand} href="#" aria-label="案屿项目总览">
+      <a className={styles.brand} href="#" aria-label="案屿项目总览" title="返回项目总览">
         <span className={styles.brandMark}><Icon name="island" /></span>
         <span className={styles.brandName}>案屿<small>ISLE</small></span>
       </a>
       <div className={styles.headerTitle}>
         {currentId ? <nav className={styles.crumb} aria-label="面包屑">
-          <a href="#"><span className={styles.crumbArrow} aria-hidden="true">←</span>项目交接单</a>
+          <a className={`${styles.quietButton} ${styles.crumbBack}`} href="#" title="返回项目交接单"><span className={styles.crumbArrow} aria-hidden="true">←</span>项目交接单</a>
           <span className={styles.crumbSep} aria-hidden="true">/</span>
           <span className={styles.crumbCurrent} aria-current="page">{current?.name || '项目'}</span>
         </nav> : <>

@@ -399,6 +399,7 @@
 }
 .brandMark svg { width: 30px; height: 30px; }
 .brandName { display: block; font: 700 23px/1 var(--head); letter-spacing: .03em; }
+.brand:hover .brandName { text-decoration: underline; text-underline-offset: 4px; }
 .brandName small { display: block; margin-top: 4px; font: 12px/1 var(--mono); letter-spacing: .2em; color: var(--muted); }
 .headerTitle { min-width: 0; }
 .headerTitle h1 {
@@ -1366,6 +1367,7 @@
   text-underline-offset: 3px;
 }
 .crumb a:hover { color: var(--ink); text-decoration-color: var(--ink); }
+.crumb .crumbBack, .crumb .crumbBack:hover { padding: 0 10px; color: var(--ink); text-decoration: none; }
 .crumbArrow { color: var(--muted); font-size: 13px; }
 
 .utilityButton { flex: none; }

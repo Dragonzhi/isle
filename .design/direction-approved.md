@@ -163,3 +163,20 @@
 - 动效：正常状态 slip `animationName` 为 rise、0.28s；模拟 reduced-motion 后为 `none` / `0s`；
 - 可点击审计仍为空；无控制台错误；
 - 截图：`screenshots/production-settings-standard-1440.png`、`production-settings-large-1440.png`、`production-settings-390.png`、`production-xlarge-320.png`、`production-overview-320.png`、`production-detail-top-1440.png`。
+
+## 面包屑返回按钮（2026-10-24）
+
+用户截图指出详情页顶部的「← 项目交接单」看起来像普通文字，不明显。
+
+处理：
+
+- 把面包屑返回从“带下划线的文字链接”改成纸键按钮：1px 边框、纸面渐变、3px 硬边、hover 上浮、active 下压。
+- 保留 `← 项目交接单 / 当前项目` 的面包屑语义；按钮有 `title="返回项目交接单"`。
+- 品牌区补 `title="返回项目总览"`，hover 时品牌名下划线，提示也可点。
+- 移动端面包屑隐藏，仍保留 `← 返回总览`，不额外占用页头宽度。
+
+验证：
+
+- `npm run check`、`npm test`（38 项）、`npm run build` 通过；生产构建无控制台错误；
+- 可点击审计仍为空；详情页 1440/390 无横向溢出；
+- 截图：`screenshots/production-detail-top-1440.png`。
