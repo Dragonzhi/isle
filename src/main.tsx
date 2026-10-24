@@ -4,6 +4,7 @@ import type { GitHistory, Project, ProjectSkill, Snapshot, TaskState, Workspace,
 import { closeout, focusTask, handoff, skillTransfer, worktrees } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
 import { orderHistory } from './history.ts';
+import { formatNext } from './next.ts';
 import styles from './App.module.css';
 
 class RequestError extends Error {
@@ -222,6 +223,7 @@ function App() {
       ? 'TASKS.md 原文顺序与日期不一致，界面已按日期倒序显示；原文未改。'
       : '界面按日期倒序显示；TASKS.md 原文保留原顺序。'
     : '按文件追加顺序显示。';
+  const currentNext = formatNext(current?.next ?? '');
   useEffect(() => {
     setOpenSections({ summary: false, history: false, git: false });
     setMoreOpen(false);
@@ -520,6 +522,7 @@ function App() {
 
   function nextEditor(project: Project, showFocus = true, showEditHint = true, textEditable = true) {
     const focus = focusTask(project.tasks);
+    const next = formatNext(project.next);
     if (editing?.id === project.id && editing.kind === 'next') return <form className={styles.editForm} onSubmit={saveNext}>
       <input ref={editInput} aria-label={`${project.name}的下一步`} value={editing.value} maxLength={4000} disabled={busy} placeholder="下一步做什么" onChange={event => setEditing({ ...editing, value: event.target.value })} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.stopPropagation(); setEditing(null); } if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault(); }} />
       <button className={styles.smallButton} disabled={busy || editing.conflict}>保存</button>
@@ -529,8 +532,8 @@ function App() {
       {editing.reviewed && <div className={styles.comparison}>最新内容：{editing.baseline || '（空）'}。已保留你的输入，确认后可直接保存。</div>}
     </form>;
     if (!textEditable) return <div className={styles.nextCellContent}>
-      <div className={`${styles.nextButton} ${styles.nextStatic} ${!project.next ? styles.missing : ''}`}>
-        <span className={styles.nextText}>{project.next || '尚未填写下一步'}</span>
+      <div className={`${styles.nextButton} ${styles.nextStatic} ${!project.next ? styles.missing : ''}`} title={next.plain || undefined}>
+        <span className={styles.nextText}>{next.text || '尚未填写下一步'}</span>
       </div>
       {showFocus && focus && (
         <span className={styles.focusTaskChip} title={`当前任务：${focus.title}${focus.tags.length ? ' ' + focus.tags.join(' ') : ''}`}>
@@ -541,8 +544,8 @@ function App() {
       )}
     </div>;
     return <div className={styles.nextCellContent}>
-      <button className={`${styles.nextButton} ${!project.next ? styles.missing : ''}`} title={project.next || '点击填写下一步'} onClick={() => startEdit(project)} disabled={project.state !== 'ok' || editing?.kind === 'summary'}>
-        <span className={styles.nextText}>{project.next || '+ 填写下一步'}</span>
+      <button className={`${styles.nextButton} ${!project.next ? styles.missing : ''}`} title={next.plain || '点击填写下一步'} onClick={() => startEdit(project)} disabled={project.state !== 'ok' || editing?.kind === 'summary'}>
+        <span className={styles.nextText}>{next.text || '+ 填写下一步'}</span>
         {showEditHint && <span className={styles.editHint} aria-hidden="true"><Icon name="edit" size={14} /><span>编辑</span></span>}
       </button>
       {showFocus && focus && (
@@ -571,6 +574,7 @@ function App() {
 
   function subRow(project: Project) {
     const offline = project.state !== 'ok';
+    const next = formatNext(project.next);
     const meta = offline ? '离线' : (project.status === '暂停' ? '暂停 / ' : project.status === '已完成' ? '已完成 / ' : '') + freshness(project);
     return <div
       id={'project-' + project.id}
@@ -582,7 +586,7 @@ function App() {
     >
       <span className={`${styles.subDot} ${project.status === '暂停' ? styles.subPaused : ''} ${offline ? styles.subOffline : ''}`.trim()} />
       <a className={styles.subName} href={'#project/' + project.id}>{project.name}<span className={styles.subOpen} aria-hidden="true"><Icon name="chevron" size={14} /></span></a>
-      <span className={styles.subNext}>{offline ? (project.error || '目录不可读') : (project.next || '尚未填写下一步')}</span>
+      <span className={styles.subNext} title={offline ? undefined : next.plain || undefined}>{offline ? (project.error || '目录不可读') : (next.text || '尚未填写下一步')}</span>
       <span className={`${styles.subMeta} ${stale(project) ? styles.stale : ''}`.trim()}>{meta}</span>
       {offline || project.status === '已完成'
         ? <span className={styles.subMuted}>{offline ? '离线' : '已完成'}</span>
@@ -694,7 +698,9 @@ function App() {
           </div>
           <section className={styles.contextCard} aria-label="项目下一步">
             <div className={styles.contextHead}>
-              <p className={styles.fieldLabel}>下一步</p>
+              <p className={styles.fieldLabel}>下一步
+                {(currentNext.overlong || currentNext.markdown) && <span className={styles.nextWarning} title="建议一句话、50 字内，纯文本；细节写进交接摘要">建议精简</span>}
+              </p>
               <div className={styles.contextHeadActions}>
                 <span className={styles.contextHint}>交接时随记录交给下一位 Agent</span>
                 {!(editing?.id === current.id && editing.kind === 'next') && <button className={styles.quietButton} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => startEdit(current)}><Icon name="edit" size={14} />编辑</button>}

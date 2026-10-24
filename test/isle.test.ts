@@ -633,3 +633,11 @@ test('worktree prompt is a copyable instruction that never executes anything', (
   assert.match(text, /另开一个 Agent 会话/);
   assert.match(text, /不会跟着过去/);
 });
+
+test('long or Markdown next is warned about but preserved in the file', () => {
+  const raw = '**先验证** `life:simulate`，再确认自然触碰偏差。当前未接入渲染；动作与录像缺口保留。';
+  const parsed = parseTasks(Buffer.from(`# 项目\nnext: ${raw}\n\n## 待办\n- [ ] 保留\n`));
+  assert.equal(parsed.next, raw);
+  assert.ok(parsed.warnings.some(warning => warning.includes('续接提示过长')));
+  assert.ok(parsed.warnings.some(warning => warning.includes('Markdown')));
+});

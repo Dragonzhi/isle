@@ -1900,3 +1900,381 @@
   .collapsedSection { padding-top: 14px; padding-bottom: 14px; }
   .sectionHeadingActions { gap: 6px; }
 }
+
+/* ═════════════════════════════════════════════════════════════
+   2026-10-24 · Letterpress 压印纸
+   页面：纸纤维；控件：凸起纸键；表单/代码：压凹；
+   状态：盖章；正文与导航保持平面。阴影只表达按压与层级。
+   ═════════════════════════════════════════════════════════════ */
+
+.app {
+  --lp-edge: #b7b2a5;
+  --lp-edge-strong: #a7a194;
+  --lp-highlight: rgba(255, 255, 255, .78);
+  --lp-well: #efede5;
+  --lp-well-strong: #e8e5db;
+  --lp-raise-1: 0 2px 0 var(--lp-edge), 0 4px 10px rgba(29, 37, 34, .07), inset 0 1px 0 var(--lp-highlight);
+  --lp-raise-2: 0 2px 0 var(--lp-edge), 0 8px 20px rgba(29, 37, 34, .06), inset 0 1px 0 rgba(255, 255, 255, .72);
+  --lp-raise-3: 0 4px 0 var(--lp-edge), 0 26px 70px rgba(29, 37, 34, .24), inset 0 1px 0 var(--lp-highlight);
+  --lp-press-1: inset 0 2px 4px rgba(29, 37, 34, .11), inset 0 -1px 0 var(--lp-highlight);
+  --lp-press-2: inset 0 1px 2px rgba(29, 37, 34, .12), inset 0 -1px 0 rgba(255, 255, 255, .72);
+  --lp-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='.035'/%3E%3C/svg%3E");
+  background-color: var(--paper);
+  background-image: var(--lp-grain);
+  background-size: 180px 180px;
+  background-blend-mode: multiply;
+}
+
+/* ── 页头与品牌印章 ── */
+.siteHeader, .siteHeaderCompact, .toolbar {
+  background-color: var(--paper);
+  background-image: var(--lp-grain);
+  background-size: 180px 180px;
+}
+.siteHeader, .siteHeaderCompact { box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .55); }
+.brandMark {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--sage-dark);
+  background: var(--sage);
+  color: var(--sheet);
+  box-shadow:
+    inset 0 0 0 1px rgba(251, 250, 246, .42),
+    inset 0 -2px 0 rgba(0, 0, 0, .16),
+    0 2px 0 rgba(62, 94, 82, .35);
+}
+.brandMark svg { width: 24px; height: 24px; }
+
+.projectHead {
+  border-bottom-color: var(--ink);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .62);
+}
+.headerTitle h1, .projectTitle, .slipTitle h2, .dialogHeading h2, .empty h2,
+.sectionHeading h2, .summaryHeading h2 {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
+}
+
+/* ── 浮起的纸片 ── */
+.slip { box-shadow: var(--lp-raise-2); }
+.slip:hover {
+  transform: translateY(-2px);
+  border-top-color: var(--line-dark);
+  border-right-color: var(--line-dark);
+  border-bottom-color: var(--line-dark);
+  box-shadow:
+    0 3px 0 var(--lp-edge),
+    0 16px 32px rgba(29, 37, 34, .10),
+    inset 0 1px 0 rgba(255, 255, 255, .82);
+}
+.contextCard, .taskGroup, .summaryCard, .gitCard, .notice { box-shadow: var(--lp-raise-2); }
+.errorCard {
+  box-shadow:
+    0 2px 0 #d8b9ad,
+    0 8px 20px rgba(169, 74, 47, .08),
+    inset 0 1px 0 rgba(255, 255, 255, .62);
+}
+
+/* ── 工具槽与纸键 ── */
+.projectUtilities {
+  gap: 6px;
+  padding: 4px 5px;
+  border: 1px solid var(--line);
+  border-bottom-color: var(--line-dark);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+}
+.utilityButton {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  background-color: var(--sheet);
+  background-image: linear-gradient(180deg, #fdfcf8, #f3f2ec);
+  color: var(--ink-2);
+  box-shadow: 0 2px 0 var(--lp-edge), inset 0 1px 0 #fff;
+}
+.utilityButton:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: #eae8e0;
+  color: var(--ink);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 var(--lp-edge), 0 5px 12px rgba(29, 37, 34, .08), inset 0 1px 0 #fff;
+}
+.utilityButton:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 var(--lp-edge); }
+.utilityDanger {
+  border-color: #d8b9ad;
+  background: #fbf5f1;
+  color: var(--rust);
+  box-shadow: 0 2px 0 #d8b9ad, inset 0 1px 0 #fff;
+}
+.utilityDanger:hover:not(:disabled) {
+  border-color: var(--rust);
+  background: #f4e6e0;
+  color: var(--rust);
+  box-shadow: 0 3px 0 #d8b9ad, 0 5px 12px rgba(169, 74, 47, .10), inset 0 1px 0 #fff;
+}
+
+/* 纸面小键统一到压印边缘 */
+.secondary, .quietButton, .smallButton, .miniButton, .transferTabs > button, .iconButtonBordered {
+  box-shadow: 0 3px 0 var(--lp-edge), 0 4px 10px rgba(29, 37, 34, .06), inset 0 1px 0 #fff;
+}
+@media (hover: hover) {
+  .secondary:hover:not(:disabled), .quietButton:hover:not(:disabled), .smallButton:hover:not(:disabled),
+  .miniButton:hover:not(:disabled), .transferTabs > button:hover:not(:disabled) {
+    box-shadow: 0 4px 0 var(--lp-edge), 0 8px 18px rgba(29, 37, 34, .10), inset 0 1px 0 #fff;
+  }
+  .iconButtonBordered:hover:not(:disabled) {
+    box-shadow: 0 4px 0 var(--lp-edge), 0 8px 18px rgba(29, 37, 34, .10), inset 0 1px 0 #fff;
+  }
+}
+.secondary:active:not(:disabled), .quietButton:active:not(:disabled), .smallButton:active:not(:disabled),
+.miniButton:active:not(:disabled), .transferTabs > button:active:not(:disabled),
+.iconButtonBordered:active:not(:disabled) { box-shadow: 0 0 0 var(--lp-edge); }
+
+/* ── 压凹的输入、代码与标签 ── */
+.projectForm input:not([type="checkbox"]),
+.projectForm select,
+.agentInput,
+.summaryInput,
+.handoff,
+.editForm > input,
+.contextCard .editForm input,
+.slipNext .editForm input,
+.projectForm textarea {
+  border-color: var(--lp-edge-strong);
+  background-color: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+}
+.projectForm input:not([type="checkbox"]):hover:not(:focus),
+.projectForm select:hover:not(:focus),
+.agentInput:hover:not(:focus),
+.summaryInput:hover:not(:focus),
+.handoff:hover:not(:focus),
+.editForm > input:hover:not(:focus),
+.contextCard .editForm input:hover:not(:focus),
+.slipNext .editForm input:hover:not(:focus),
+.projectForm textarea:hover:not(:focus) { border-color: #9d9789; }
+.projectForm input:not([type="checkbox"]):focus,
+.projectForm select:focus,
+.agentInput:focus,
+.summaryInput:focus,
+.handoff:focus,
+.editForm > input:focus,
+.contextCard .editForm input:focus,
+.slipNext .editForm input:focus,
+.projectForm textarea:focus {
+  box-shadow: var(--lp-press-1), 0 0 0 2px rgba(79, 118, 103, .16);
+}
+
+.app input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  margin: 0;
+  border: 1px solid var(--lp-edge-strong);
+  border-radius: 0;
+  background-color: var(--lp-well);
+  background-image: none;
+  box-shadow: var(--lp-press-2);
+  cursor: pointer;
+}
+.app input[type="checkbox"]:checked {
+  border-color: var(--ink);
+  background-color: var(--ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5 6.5 12 13 4.5' fill='none' stroke='%23fbfaf6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 12px 12px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .3);
+}
+.app input[type="checkbox"]:disabled { opacity: .55; cursor: not-allowed; }
+.moreCheck {
+  border-color: var(--lp-edge-strong);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-2);
+}
+.moreItem:hover { box-shadow: inset 0 1px 2px rgba(29, 37, 34, .10); }
+.moreItem[aria-checked="true"] .moreCheck {
+  background: var(--ink);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .32);
+}
+
+.tag, .slipNext .tag, .focusBadge, .focusTaskChip, .slipNext .focusTaskChip, .taskGroup h3 small {
+  border: 1px solid var(--line);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-2);
+}
+.stamp span, .statusChip, .projectFlag {
+  background: rgba(251, 250, 246, .62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .78), 0 1px 0 rgba(29, 37, 34, .06);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .55);
+}
+.gitHash, .markdown code {
+  border: 1px solid var(--line);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-2);
+}
+.markdown pre {
+  border: 1px solid var(--line);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+}
+.markdown pre code { border: 0; box-shadow: none; background: none; }
+.markdown th { background: var(--lp-well); box-shadow: var(--lp-press-2); }
+.listFooter kbd {
+  padding: 1px 5px;
+  border: 1px solid var(--lp-edge);
+  background: var(--sheet);
+  box-shadow: 0 2px 0 var(--lp-edge), inset 0 1px 0 #fff;
+}
+.warnings {
+  border-color: var(--line-dark);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+}
+.completedGroup { background: var(--lp-well); box-shadow: var(--lp-press-1); }
+.doneToggle {
+  border: 1px solid var(--line);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+}
+.doneToggle:hover { background: #eae8e0; color: var(--ink); }
+.subList {
+  padding: 0 12px;
+  border-top: 1px solid var(--line-dark);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+}
+.empty {
+  border: 1px dashed var(--lp-edge-strong);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+}
+.emptyIsland {
+  background: var(--sheet);
+  border-color: var(--lp-edge);
+  box-shadow: var(--lp-raise-1);
+}
+.sizePreview,
+.projectForm .skillInstallLabel,
+.workspaceChoice,
+.projectForm .transferNote {
+  border-color: var(--line-dark);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+}
+
+/* ── 浮层：对话框、菜单、关闭键 ── */
+.dialog {
+  border-color: var(--ink);
+  box-shadow: var(--lp-raise-3);
+}
+.dialogHeading { box-shadow: 0 1px 0 rgba(255, 255, 255, .62); }
+.dialog .iconButton {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  background: linear-gradient(180deg, #fdfcf8, #f3f2ec);
+  color: var(--ink);
+  box-shadow: 0 2px 0 var(--lp-edge), inset 0 1px 0 #fff;
+}
+.dialog .iconButton:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: #eae8e0;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 0 var(--lp-edge), 0 5px 12px rgba(29, 37, 34, .10), inset 0 1px 0 #fff;
+}
+.dialog .iconButton:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 var(--lp-edge); }
+.moreMenu {
+  border-color: var(--line-dark);
+  box-shadow: var(--lp-raise-3);
+}
+
+/* ── 选中/展开态的压印 ── */
+.transferTabs > button[aria-pressed="true"] {
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+  transform: translateY(1px);
+}
+.sizeOption {
+  background-image: linear-gradient(180deg, #fdfcf8, #f3f2ec);
+  box-shadow: var(--lp-raise-1);
+}
+.sizeOptionActive {
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+  transform: translateY(1px);
+}
+.tab[aria-pressed="true"] { text-shadow: 0 1px 0 rgba(255, 255, 255, .55); }
+
+.editHint {
+  box-shadow: 0 1px 0 var(--lp-edge), inset 0 1px 0 #fff;
+}
+.stamp small, .slipUpdate, .subMeta, .projectFresh, .gitDate {
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .45);
+}
+
+/* ── 响应式 ── */
+@media (max-width: 760px) {
+  .projectUtilities { gap: 8px; padding: 6px; }
+  .utilityButton { width: 100%; min-height: 34px; justify-content: flex-start; }
+  .utilityDanger { grid-column: 1 / -1; justify-content: center; }
+  .subList { padding: 0 10px; }
+  .brandMark { width: 32px; height: 32px; }
+}
+@media (max-width: 520px) {
+  .projectUtilities { grid-template-columns: 1fr 1fr; }
+  .utilityButton { width: 100%; }
+}
+
+/* ── 无障碍降级 ── */
+@media (forced-colors: active) {
+  .slip, .contextCard, .taskGroup, .summaryCard, .gitCard, .notice, .errorCard,
+  .dialog, .moreMenu, .empty, .emptyIsland { box-shadow: none; border: 1px solid ButtonText; }
+  .projectForm input:not([type="checkbox"]), .projectForm select, .agentInput,
+  .summaryInput, .handoff, .editForm > input, .contextCard .editForm input,
+  .slipNext .editForm input, .projectForm textarea { box-shadow: none; border: 1px solid ButtonText; background: Canvas; }
+  .stamp span, .statusChip, .projectFlag, .tag, .focusBadge, .focusTaskChip, .taskGroup h3 small {
+    box-shadow: none;
+    border: 1px solid ButtonText;
+  }
+  .app input[type="checkbox"] { box-shadow: none; border: 1px solid ButtonText; background: Canvas; }
+  .app input[type="checkbox"]:checked { background: Highlight; }
+  .app input[type="checkbox"] { -webkit-appearance: auto; appearance: auto; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .slip:hover, .utilityButton:hover:not(:disabled), .secondary:hover:not(:disabled),
+  .quietButton:hover:not(:disabled), .smallButton:hover:not(:disabled), .miniButton:hover:not(:disabled),
+  .transferTabs > button:hover:not(:disabled), .iconButtonBordered:hover:not(:disabled),
+  .dialog .iconButton:hover:not(:disabled) { transform: none; }
+}
+
+/* ── next：给人看的单句索引，不是 Agent 报告 ── */
+.slipNext .nextText,
+.contextCard .nextText {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.nextWarning {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border: 1px solid #d8b9ad;
+  background: #fbf5f1;
+  color: var(--rust);
+  font-size: var(--fs-meta);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.2;
+  vertical-align: 1px;
+  box-shadow: 0 1px 0 #d8b9ad;
+}

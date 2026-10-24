@@ -25,6 +25,10 @@
 
 **2026-10-24 主按钮立体感：** 墨色主按钮补顶部棱边、3px 硬边、软投影与按下内阴影；截图见 `screenshots/production-header-actions-1440.png`、`production-primary-actions-1440.png`。
 
+**2026-10-24 Letterpress 全站压印纸：** 全站统一为「凸起 / 压凹 / 盖章 / 平面」四态；纸纤维、纸片硬边、输入内凹、品牌与状态盖章；正文和导航保持平面。规范见 `letterpress.md`，截图见 `screenshots/production-letterpress-overview-1440.png`、`production-letterpress-cards-1440.png`、`production-letterpress-detail-1440.png`、`production-letterpress-modal-1440.png`、`production-letterpress-mobile-390.png`。
+
+**2026-10-25 下一步单句化：** `next` 只展示第一句、50 字内，去掉 Markdown；原文保留在 tooltip/编辑框，超长或含格式时详情给「建议精简」。`src/next.ts` 新增 5 项测试。
+
 打开 `index.html` 看选择页，或直接打开下面三个单文件。每个文件都可以切换项目、打开“交接”弹窗；其余未接入的流程只给诚实提示。
 
 ## 三个方向

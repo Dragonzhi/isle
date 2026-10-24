@@ -101,6 +101,15 @@ export function parseTasks(data: Buffer, modified = new Date()) {
   if (['进行中', '暂停', '已完成'].includes(get('status'))) status = get('status') as typeof status;
   else warnings.push(get('status') ? 'status 无法识别，暂按进行中显示。' : '缺少 status，暂按进行中显示。');
   if (!get('next')) warnings.push('尚未填写续接提示。');
+  else {
+    const next = get('next');
+    if (next.length > 50 || /[。！？!?].+[。！？!?]/.test(next)) {
+      warnings.push('续接提示过长或多句，建议一句话（50 字内）；详情写进交接摘要。');
+    }
+    if (/(\*\*|__|`|\[[^\]]+\]\([^)]+\)|^\s{0,3}#{1,6}\s)/m.test(next)) {
+      warnings.push('续接提示含 Markdown 标记，建议纯文本；详情写进交接摘要。');
+    }
+  }
   const estimated = !validDate(get('updated'));
   const updated = estimated ? today(modified) : get('updated');
   if (estimated) warnings.push('updated 缺失或无效，日期使用文件时间估值。');

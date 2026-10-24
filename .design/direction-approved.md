@@ -230,3 +230,51 @@
 - 详情三区默认无内容且 `aria-expanded=false`；展开后摘要操作出现、留痕 10 条、Git 36 条；
 - 无控制台错误；可点目标无小于 24px。
 - 截图：`screenshots/production-toolbar-1440.png`、`production-header-actions-1440.png`、`production-primary-actions-1440.png`、`production-view-cards-1440.png`、`production-view-cards-1024.png`、`production-view-cards-390.png`、`production-view-cards-320.png`、`production-more-menu-1440.png`、`production-filter-stale-1440.png`、`production-collapsed-1440.png`、`production-detail-expanded-1440.png`。
+
+## Letterpress 全站压印纸（2026-10-24）
+
+用户问：
+
+> 那可以把整体的各种物件的风格都做成 Letterpress 的风格吗？
+
+判断：可以，但不能把每个物件都做成同一种凸起。全站统一就变成塑料或新拟态。采用 **凸起 / 压凹 / 盖章 / 平面** 四种状态：
+
+- 可点的凸起：按钮、工具键、卡片、弹窗。
+- 可输入的压凹：输入框、textarea、select、代码、标签、子工作区。
+- 状态盖章：品牌、状态章、旗标、kbd、日期元信息。
+- 可读的平面：正文、表格内容、tab、面包屑、页脚。
+
+实现：
+
+- 在 `src/App.module.css` 末尾新增 Letterpress 最终层，定义 `--lp-edge`、`--lp-raise-1/2/3`、`--lp-press-1/2`、`--lp-grain`。
+- 页面、页头、工具条铺约 3.5% 透明度的内联 SVG 纸纤维；纸片本身保持哑光。
+- 品牌图标改为 32px 苔绿小方印；项目头下缘双墨线；大标题只加极轻白色下影。
+- 项目卡/上下文卡/任务组/摘要/留痕/Git/Skill 全部 2px 硬边 + 浅影；浮层 4px 硬边。
+- 详情工具条改为压凹工具槽 + 六个小纸键；卡片子工作区改为压凹浅槽。
+- 输入/textarea/select/代码/标签全部压凹；checkbox 改成纸面小方格，选中墨色盖印。
+- 弹窗、筛选菜单、notice、warning、error、空态、kbd、状态章全部纳入同一套状态。
+- 正文不加文字阴影或纹理；tab/面包屑保持平面；forced-colors 与 reduced-motion 有降级。
+
+验证：
+
+- `npm run check`、`npm test`（43 项）、`npm run build` 通过；生产构建无控制台错误。
+- 计算样式：slip/context/taskGroup/summary 为 2px 硬边 + 浅影；dialog 为 4px；input 为 inset；checkbox 选中为墨色。
+- 1440/1024/390/320 无横向溢出；移动端工具键两列；xlarge 320 无溢出。
+- 设计规范见 `letterpress.md`；截图：`screenshots/production-letterpress-overview-1440.png`、`production-letterpress-cards-1440.png`、`production-letterpress-detail-1440.png`、`production-letterpress-modal-1440.png`、`production-letterpress-mobile-390.png`。
+
+## 下一步索引单句化（2026-10-25）
+
+用户截图指出：部分项目的 `next` 被 Agent 写成多句、超长，甚至夹带 Markdown；它应该是给人看的一句话，像「停在 05 中性纸前端改版；下一步做真实交接或性能复测」那样。
+
+处理：
+
+- 新增 `src/next.ts`：`next` 展示时去掉 Markdown/反引号/链接语法，只取第一句；超过 50 字截断并加省略号。
+- 卡片、工作区子行、详情下一步统一使用短展示；完整原文保留在 tooltip 和编辑框，不丢数据。
+- 详情若有超长或 Markdown，字段旁显示「建议精简」陶土红提示；服务端解析同时给出「过长/多句」或「含 Markdown」警告，但原文不改。
+- 卡片和详情的下一步最多两行；正文、摘要和工作留痕不受影响。
+
+验证：
+
+- 新增 `src/next.ts` 与 5 项单元测试，总测试数 49；
+- `npm run check`、`npm run build` 通过；生产 QA 1440/1024/390/320 无横向溢出、无控制台错误；
+- 未改写任何项目的 TASKS.md 原文。
