@@ -601,7 +601,7 @@
 .subList { margin-top: 14px; border-top: 1px dashed var(--line-dark); }
 .subRow {
   display: grid;
-  grid-template-columns: 8px minmax(110px, 130px) minmax(0, 1fr) 80px auto;
+  grid-template-columns: 8px minmax(140px, 170px) minmax(0, 1fr) 80px auto;
   gap: 14px;
   align-items: center;
   min-width: 0;
@@ -1423,9 +1423,9 @@
 
 .subRow { cursor: pointer; transition: background-color .14s var(--ease); }
 .subRow:hover { background: #f0efe8; }
-.subName { display: inline; }
-.subOpen { display: inline-flex; vertical-align: middle; margin-left: 6px; color: var(--muted); font-size: 14px; line-height: 1; transition: color .14s var(--ease), transform .14s var(--ease); }
-.subRow:hover .subOpen { color: var(--ink); transform: translateX(2px); }
+.subName { display: block; position: relative; padding: 2px 20px 2px 0; }
+.subOpen { position: absolute; top: 50%; right: 0; display: inline-flex; margin-left: 0; color: var(--muted); font-size: 14px; line-height: 1; transform: translateY(-50%); transition: color .14s var(--ease), transform .14s var(--ease); }
+.subRow:hover .subOpen { color: var(--ink); transform: translate(2px, -50%); }
 
 /* ── 长文阅读：衬线、窄栏、段距 ── */
 .markdown, .projectPage .markdown {
@@ -1480,4 +1480,256 @@
 @media (max-width: 520px) {
   .editHint > span { display: none; }
   .editHint { padding: 3px; }
+}
+
+/* ═════════════════════════════════════════════════════════════
+   2026-10-24 · 字号设置、纸键与动效
+   字号：--app-font 三档，所有正文用 calc(var(--app-font) * n)。
+   触感：纸键硬边 + 上浮 + 按下；动效只动 transform / opacity。
+   ═════════════════════════════════════════════════════════════ */
+
+.app {
+  --app-font: 17.5px;
+  --fs-body: var(--app-font);
+  --fs-meta: calc(var(--app-font) * .69);
+  --fs-label: calc(var(--app-font) * .74);
+  --fs-small: calc(var(--app-font) * .75);
+  --fs-ui: calc(var(--app-font) * .82);
+  --fs-button: calc(var(--app-font) * .84);
+  --fs-button-sm: calc(var(--app-font) * .78);
+  --fs-reading: calc(var(--app-font) * 1.03);
+  --fs-next: calc(var(--app-font) * 1.09);
+  --fs-context: calc(var(--app-font) * 1.43);
+  --fs-section: calc(var(--app-font) * 1.26);
+  --fs-task-group: calc(var(--app-font) * .89);
+  --fs-slip-title: calc(var(--app-font) * 1.43);
+  --fs-project: calc(var(--app-font) * 2.29);
+  --fs-page: calc(var(--app-font) * 2.06);
+  --fs-dialog: calc(var(--app-font) * 1.54);
+  --fs-brand: calc(var(--app-font) * 1.31);
+  --fs-handoff: calc(var(--app-font) * .8);
+  --fs-input: calc(var(--app-font) * .86);
+  --fs-textarea: calc(var(--app-font) * .94);
+  --motion-fast: 120ms;
+  --motion: 180ms;
+  --motion-slow: 280ms;
+  --ease-out: cubic-bezier(.2, .7, .3, 1);
+  font-size: var(--app-font);
+  line-height: 1.7;
+}
+.app[data-text-size="large"] { --app-font: 19px; }
+.app[data-text-size="xlarge"] { --app-font: 20.5px; }
+
+/* ── 字号覆盖 ── */
+.headerTitle h1 { font-size: var(--fs-page); }
+.projectTitle { font-size: var(--fs-project); }
+.brandName { font-size: var(--fs-brand); }
+.brandName small { font-size: var(--fs-meta); }
+.headerMeta, .projectPath, .statusChip, .projectFresh, .projectFlag, .projectGroupNote,
+.tab span, .filter, .slipCount, .slipPath, .slipUpdate, .stamp span, .stamp small,
+.subMeta, .subMuted, .gitDate, .gitHint, .historyHint, .doneLabel, .fieldLabel,
+.contextHint, .projectFooter, .listFooter, .doneToggle, .tag, .focusBadge,
+.focusTaskChip, .focusTaskIcon, .taskWarning, .taskGroup h3 small, .editHint,
+.projectForm label > span, .skillInstallLabel small, .authorHint, .summaryPreview,
+.projectForm .transferNote, .comparison, .conflict, .transferTabs > span { font-size: var(--fs-meta); }
+.crumb, .textLink, .projectForm label, .workspaceName,
+.formError, .message { font-size: var(--fs-label); }
+.subName, .subNext { font-size: calc(var(--app-font) * .86); }
+.tab, .emptyText, .taskGroup h3 { font-size: var(--fs-task-group); }
+.slipTitle h2 { font-size: var(--fs-slip-title); }
+.taskTitle { font-size: var(--fs-body); }
+.slipNext .nextButton { font-size: var(--fs-next); }
+.contextCard .nextButton, .contextCard .nextStatic { font-size: var(--fs-context); }
+.sectionHeading h2, .summaryHeading h2 { font-size: var(--fs-section); }
+.markdown, .projectPage .markdown { font-size: var(--fs-reading); max-width: min(46em, 900px); }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6,
+.projectPage .markdown h1, .projectPage .markdown h2, .projectPage .markdown h3,
+.projectPage .markdown h4, .projectPage .markdown h5, .projectPage .markdown h6 {
+  font-size: calc(var(--app-font) * 1.09);
+}
+.markdown code, .projectPage .markdown code { font-size: calc(var(--app-font) * .74); }
+.summaryInput, .projectPage .summaryInput { font-size: var(--fs-textarea); max-width: min(46em, 900px); }
+.summaryEmpty, .projectPage .summaryEmpty { font-size: calc(var(--app-font) * .86); max-width: min(46em, 900px); }
+.gitHash { font-size: var(--fs-small); }
+.gitMessage { font-size: calc(var(--app-font) * .83); }
+.skillDescription { font-size: calc(var(--app-font) * .86); }
+.skillFiles { font-size: var(--fs-small); }
+.skillFiles code { font-size: var(--fs-meta); }
+.notice { font-size: calc(var(--app-font) * .78); }
+.warnings { font-size: var(--fs-small); }
+.errorCard { font-size: var(--fs-ui); }
+.errorCard pre { font-size: var(--fs-meta); }
+.empty h2 { font-size: calc(var(--app-font) * 1.37); }
+.empty > p { font-size: calc(var(--app-font) * .86); }
+.emptyText { font-size: var(--fs-ui); }
+
+/* ── 控件字号 ── */
+.primary, .secondary, .primaryButton, .projectPage .primary, .projectPage .secondary { font-size: var(--fs-button); }
+.handoffButton { font-size: var(--fs-handoff); }
+.quietButton, .smallButton, .miniButton, .textButton, .projectPage .textButton { font-size: var(--fs-button-sm); }
+.textSizeButton { width: 34px; padding: 0; font-size: calc(var(--app-font) * .9); font-weight: 600; letter-spacing: .02em; }
+.dialogHeading h2 { font-size: var(--fs-dialog); }
+.projectForm > p { font-size: calc(var(--app-font) * .77); }
+.projectForm input, .projectForm select, .agentInput { font-size: var(--fs-input); }
+.projectForm .skillInstallLabel > span { font-size: calc(var(--app-font) * .78); }
+.projectForm .skillDescription { font-size: var(--fs-small); }
+.handoff, .handoff.shortInstruction { font-size: var(--fs-small); }
+.transferTabs > button { font-size: var(--fs-small); }
+.workspaceCheck { font-size: calc(var(--app-font) * .9); }
+
+/* ── 纸键：硬边、上浮、按下 ── */
+.primary, .primaryButton, .handoffButton {
+  background-image: linear-gradient(180deg, #2a3530, #1d2522);
+  box-shadow: 0 2px 0 #0d1411, inset 0 1px 0 rgba(255, 255, 255, .10);
+}
+.secondary, .quietButton, .smallButton, .miniButton, .transferTabs > button {
+  background-image: linear-gradient(180deg, #fdfcf8, #f3f2ec);
+  box-shadow: 0 3px 0 var(--line-dark), inset 0 1px 0 #fff;
+}
+.quietDanger {
+  background-image: linear-gradient(180deg, #fdf8f5, #f7ece6);
+  box-shadow: 0 3px 0 #d8b9ad, inset 0 1px 0 #fff;
+}
+.dangerButton { background-image: linear-gradient(180deg, #b45236, #a94a2f); box-shadow: 0 2px 0 #6d2f1e, inset 0 1px 0 rgba(255, 255, 255, .10); }
+.iconButtonBordered { box-shadow: 0 1px 0 var(--line); }
+.primary:disabled, .primaryButton:disabled, .handoffButton:disabled,
+.secondary:disabled, .quietButton:disabled, .smallButton:disabled, .miniButton:disabled,
+.transferTabs > button:disabled { background-image: none; box-shadow: none; transform: none; }
+
+.primary, .secondary, .primaryButton, .handoffButton, .quietButton, .smallButton, .miniButton,
+.transferTabs > button, .iconButtonBordered, .textButton {
+  transition: background-color var(--motion) var(--ease-out), border-color var(--motion) var(--ease-out),
+    color var(--motion) var(--ease-out), transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion) var(--ease-out);
+}
+.primary:active:not(:disabled), .primaryButton:active:not(:disabled), .handoffButton:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 0 0 #0d1411;
+}
+.secondary:active:not(:disabled), .quietButton:active:not(:disabled), .smallButton:active:not(:disabled),
+.miniButton:active:not(:disabled), .transferTabs > button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 0 0 0 var(--line-dark);
+}
+.quietDanger:active:not(:disabled) { box-shadow: 0 0 0 #d8b9ad; }
+.dangerButton:active:not(:disabled) { box-shadow: 0 0 0 #6d2f1e; }
+.iconButtonBordered:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 var(--line); }
+
+@media (hover: hover) {
+  .primary:hover:not(:disabled), .primaryButton:hover:not(:disabled), .handoffButton:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 0 #0d1411, 0 7px 15px rgba(29, 37, 34, .14);
+  }
+  .secondary:hover:not(:disabled), .quietButton:hover:not(:disabled), .smallButton:hover:not(:disabled),
+  .miniButton:hover:not(:disabled), .transferTabs > button:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 0 var(--line-dark), 0 6px 13px rgba(29, 37, 34, .08);
+  }
+  .quietDanger:hover:not(:disabled) { box-shadow: 0 4px 0 #d8b9ad, 0 6px 13px rgba(169, 74, 47, .10); }
+  .dangerButton:hover:not(:disabled) { box-shadow: 0 3px 0 #6d2f1e, 0 7px 15px rgba(169, 74, 47, .16); }
+  .iconButtonBordered:hover:not(:disabled) { transform: translateY(-1px); }
+  .iconButtonBordered:hover:not(:disabled) svg { transform: rotate(180deg); }
+  .iconButtonBordered svg { transition: transform var(--motion-slow) var(--ease-out); }
+  .slip:hover { transform: translateY(-2px); box-shadow: 0 10px 22px rgba(29, 37, 34, .09); }
+  .sizeOption:hover:not(:disabled) { transform: translateY(-1px); }
+}
+
+/* ── Tab 下划线 ── */
+.tab { position: relative; border-bottom: 0; }
+.tab::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: center;
+  transition: transform var(--motion) var(--ease-out);
+  pointer-events: none;
+}
+.tab[aria-pressed="true"]::after { transform: scaleX(1); }
+.tab:hover::after { transform: scaleX(.45); }
+.tab[aria-pressed="true"]:hover::after { transform: scaleX(1); }
+.tab[aria-pressed="true"] { border-bottom: 0; }
+
+/* ── 设置弹窗 ── */
+.settingsBody { min-width: 0; }
+.settingsHint { margin: 14px 0 18px; color: var(--muted); font-size: var(--fs-label); line-height: 1.8; }
+.sizeOptions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.sizeOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  color: var(--ink-2);
+  box-shadow: 0 2px 0 var(--line-dark);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--motion) var(--ease-out), border-color var(--motion) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out), box-shadow var(--motion) var(--ease-out);
+}
+.sizeOptionActive { border-color: var(--ink); background: #ebe9e1; box-shadow: 0 2px 0 var(--ink); }
+.sizeOptionSample { color: var(--ink); font-family: var(--serif); line-height: 1.1; }
+.sizeOptionLabel { font-size: var(--fs-ui); font-weight: 600; }
+.sizeOptionPx { color: var(--muted); font-family: var(--mono); font-size: var(--fs-meta); }
+.sizePreview { margin-top: 18px; padding: 16px 18px; border: 1px dashed var(--line-dark); background: var(--sheet); color: var(--ink-2); }
+.sizePreview > span { display: block; font: 700 calc(var(--app-font) * 1.7)/1.2 var(--head); }
+.sizePreview p { margin: 8px 0 0; font-size: var(--fs-reading); line-height: 1.8; }
+
+/* ── 动效 ── */
+@keyframes isle-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes isle-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes isle-dialog { from { opacity: .65; transform: translateY(5px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes isle-notice { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: none; } }
+
+.slipList > .slip { animation: isle-rise var(--motion-slow) var(--ease-out) backwards; }
+.slipList > .slip:nth-child(2) { animation-delay: 30ms; }
+.slipList > .slip:nth-child(3) { animation-delay: 60ms; }
+.slipList > .slip:nth-child(4) { animation-delay: 90ms; }
+.slipList > .slip:nth-child(5) { animation-delay: 120ms; }
+.slipList > .slip:nth-child(6) { animation-delay: 150ms; }
+.main > .projectHead, .main > .contextCard, .main > .tasksPanel,
+.main > .summaryCard, .main > .gitCard { animation: isle-rise var(--motion-slow) var(--ease-out) backwards; }
+.main > .contextCard { animation-delay: 30ms; }
+.main > .tasksPanel { animation-delay: 60ms; }
+.main > .summaryCard, .main > .gitCard { animation-delay: 80ms; }
+.dialog[open] { animation: isle-dialog var(--motion) var(--ease-out); }
+.dialog::backdrop { animation: isle-fade var(--motion) var(--ease-out); }
+.notice { animation: isle-notice var(--motion) var(--ease-out); }
+
+/* ── 新字号下的响应式 ── */
+@media (max-width: 760px) {
+  .markdown, .projectPage .markdown, .summaryInput, .projectPage .summaryInput { max-width: none; }
+  .headerTitle h1 { font-size: calc(var(--app-font) * 1.6); }
+  .projectTitle { font-size: calc(var(--app-font) * 1.72); }
+  .slipTitle h2 { font-size: calc(var(--app-font) * 1.26); }
+  .slipNext .nextButton { font-size: var(--app-font); }
+  .contextCard .nextButton, .contextCard .nextStatic { font-size: calc(var(--app-font) * 1.15); }
+  .sectionHeading h2, .summaryHeading h2 { font-size: calc(var(--app-font) * 1.15); }
+  .settingsBody { min-width: 0; }
+  .sizeOptions { gap: 8px; }
+  .sizeOption { padding: 10px; }
+}
+@media (max-width: 520px) {
+  .siteHeaderCompact { flex-wrap: wrap; row-gap: 8px; }
+  .siteHeaderCompact .headerActions { flex-wrap: wrap; }
+  .toolbar { flex-wrap: wrap; row-gap: 6px; }
+  .tabs { width: 100%; gap: 18px; }
+  .toolbarRight { width: 100%; margin-left: 0; justify-content: space-between; }
+  .sizeOptions { grid-template-columns: 1fr; }
+  .sizeOption { flex-direction: row; align-items: center; gap: 10px; }
+  .sizeOptionPx { margin-left: auto; }
+  .sizePreview { padding: 13px 14px; }
+  .app[data-text-size="xlarge"] .projectActions { grid-template-columns: 1fr; }
+  .app[data-text-size="xlarge"] .projectUtilities { grid-template-columns: 1fr; }
+  .app[data-text-size="xlarge"] .quietDanger { grid-column: auto; justify-content: flex-start; }
+}
+@media (max-width: 360px) {
+  .projectActions { grid-template-columns: 1fr; }
 }

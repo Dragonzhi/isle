@@ -128,3 +128,38 @@
 - `document.fonts.check` 命中 `Noto Sans SC` / `Noto Serif SC`；Markdown 计算宽度 759px、字号 16.5px、行高 31.35px；
 - 静止可点击审计返回空数组；Tab 焦点落在“刷新记录”时 outline 为 `solid 2px`；
 - 截图：`screenshots/production-overview-fold-1440.png`、`production-detail-top-1440.png`、`production-hover-utility-1440.png`、`production-focus-1440.png`、`production-reading-1440.png`、`production-detail-390.png`、`production-detail-320.png`。
+
+## 字号设置与动效（2026-10-24 第四轮）
+
+用户反馈：
+
+> 目前可以进行一次git存档。然后呢，目前还有的问题是字体比较的小，希望可以调整大一些，甚至说提供一个设置来调整。其次就是界面的按钮 风格很朴素，感觉挺normal。最好就是可以看看能不能适当添加一些动效。让前端更生动一点点。
+
+先存档：
+
+- 提交 `e3690cb feat(web): 05 中性纸看板与阅读、可点击修整`，包含当时的 `src/`、`public/favicon.svg` 与 `.design/` 设计记录；`.dsh-ops/` 未入库。
+- 本轮新改动默认未提交，保留工作区 diff 供确认。
+
+字号：
+
+- 默认基础字号从 15.5px 提到 17.5px；三档 `标准 17.5 / 大 19 / 特大 20.5`。
+- 页头新增 `Aa` 按钮，打开「显示设置」；三张选项卡带 `Aa / 标签 / px`，选中即时生效。
+- 选择写入 `localStorage` key `isle.text-size`；刷新保持，非法值回退标准；隐私模式不可用时不报错。
+- 字号体系改为 `--app-font` + `calc()` token；正文 17.5、阅读 18.0、交接单下一步 19.1、详情下一步 25.0、分区标题 22.0，全部随设置缩放。
+- 阅读栏宽改为 `min(46em, 900px)`；移动端取消上限。
+
+按钮与触感：
+
+- 纸键：1px 边框 + 3px 硬边 + 纸面渐变 + 内高光；hover 上浮 1px、硬边加高；active 下压并压掉硬边；主按钮墨色渐变 + 2px 深边。
+- 危险按钮用陶土红描边/渐变；禁用时保留形状、去掉硬边。
+- Tab 下划线改为 `::after` 从中心展开；刷新图标 hover 旋转 180°；卡片 hover 上浮 2px。
+- 动效：看板卡片逐张 rise、详情区块依次 rise、Tab 下划线、弹窗淡入上移、notice 滑入；只动 transform/opacity，`prefers-reduced-motion` 下全部关闭。
+
+验证：
+
+- `npm run check`、`npm test`（38 项）、`npm run build` 通过；
+- 字号：`standard` 计算 17.5px；切 `large` 19px 且 localStorage 写入；切 `xlarge` 20.5px；刷新后仍为 `xlarge`；
+- 1440 / 1024 / 390 / 320：三档均无横向溢出；xlarge 320 无裁切、无可点目标 <24px；
+- 动效：正常状态 slip `animationName` 为 rise、0.28s；模拟 reduced-motion 后为 `none` / `0s`；
+- 可点击审计仍为空；无控制台错误；
+- 截图：`screenshots/production-settings-standard-1440.png`、`production-settings-large-1440.png`、`production-settings-390.png`、`production-xlarge-320.png`、`production-overview-320.png`、`production-detail-top-1440.png`。

@@ -15,6 +15,8 @@
 
 **2026-10-24 阅读与可点击修整：** 界面切到 `Noto Sans SC`，长文切到 `Noto Serif SC`（16.5px / 1.9 / 46em）；工具条、分区操作、面包屑、下一步、子工作区行都补了静止可见的边框、箭头或铅笔提示。截图见 `screenshots/production-detail-top-1440.png`、`production-overview-fold-1440.png`、`production-hover-utility-1440.png`、`production-focus-1440.png`、`production-reading-1440.png`。
 
+**2026-10-24 字号设置与动效：** 默认基础字号提到 17.5px，新增 `Aa` 显示设置（标准 17.5 / 大 19 / 特大 20.5，localStorage 持久化）；按钮改为纸键硬边 + 上浮/按下，Tab 下划线、卡片入场、弹窗与 notice 补了短动效。截图见 `screenshots/production-settings-standard-1440.png`、`production-settings-large-1440.png`、`production-settings-390.png`、`production-xlarge-320.png`。
+
 打开 `index.html` 看选择页，或直接打开下面三个单文件。每个文件都可以切换项目、打开“交接”弹窗；其余未接入的流程只给诚实提示。
 
 ## 三个方向

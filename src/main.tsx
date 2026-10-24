@@ -76,7 +76,20 @@ function parseWorktreeInput(text: string, repoName: string) {
 type Editing = { id: string; kind: 'next' | 'summary'; value: string; hash: string; baseline: string; conflict?: boolean; reviewed?: boolean };
 type TransferFormat = 'skill' | 'full';
 type ProjectFilter = 'all' | 'active' | 'paused' | 'offline';
+type TextSize = 'standard' | 'large' | 'xlarge';
 type BoardGroup = { key: string; members: Project[]; multi: boolean; total: number; latest: string; done: boolean };
+const TEXT_SIZE_KEY = 'isle.text-size';
+const textSizeOptions: { value: TextSize; label: string; px: string }[] = [
+  { value: 'standard', label: '标准', px: '17.5px' },
+  { value: 'large', label: '大', px: '19px' },
+  { value: 'xlarge', label: '特大', px: '20.5px' },
+];
+function readTextSize(): TextSize {
+  try {
+    const saved = localStorage.getItem(TEXT_SIZE_KEY);
+    return saved === 'large' || saved === 'xlarge' ? saved : 'standard';
+  } catch { return 'standard'; }
+}
 function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
   return format === 'skill' ? skillTransfer(project, mode, author, criteria, goal) : mode === 'close' ? closeout(project, author) : handoff(project, criteria, goal, author);
 }
@@ -89,6 +102,8 @@ function App() {
   const [onlyStale, setOnlyStale] = useState(false);
   const [showDone, setShowDone] = useState(false);
   const [filter, setFilter] = useState<ProjectFilter>('all');
+  const [textSize, setTextSize] = useState<TextSize>(readTextSize);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [selected, setSelected] = useState('');
   const [editing, setEditing] = useState<Editing | null>(null);
   const [form, setForm] = useState<'add' | Project | null>(null);
@@ -147,6 +162,9 @@ function App() {
     const timeout = window.setTimeout(() => setNotice(null), 4500);
     return () => clearTimeout(timeout);
   }, [notice]);
+  useEffect(() => {
+    try { localStorage.setItem(TEXT_SIZE_KEY, textSize); } catch { /* 隐私模式或存储不可用时只影响本次会话。 */ }
+  }, [textSize]);
 
   const projects = data?.projects ?? [];
   const currentId = route.startsWith('#project/') ? route.slice(9) : '';
@@ -339,7 +357,7 @@ function App() {
 
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
-      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || workspacePicker || currentId || busy || editing || event.isComposing) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || workspacePicker || settingsOpen || currentId || busy || editing || event.isComposing) return;
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (event.key === 'Escape') { setSelected(''); return; }
@@ -356,7 +374,7 @@ function App() {
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, workspacePicker, currentId, busy, editing]);
+  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, workspacePicker, settingsOpen, currentId, busy, editing]);
 
   async function openWorkspacePicker(project: Project) {
     setWorkspacePicker({ project, list: null, selected: [], names: {}, installSkill: true, loading: true, error: '' });
@@ -569,7 +587,7 @@ function App() {
 
   const now = new Date();
   const date = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()]}`;
-  return <div className={styles.app}>
+  return <div className={styles.app} data-text-size={textSize}>
     <header className={`${styles.siteHeader} ${currentId ? styles.siteHeaderCompact : ''}`}>
       <a className={styles.brand} href="#" aria-label="案屿项目总览">
         <span className={styles.brandMark}><Icon name="island" /></span>
@@ -587,6 +605,7 @@ function App() {
       </div>
       <div className={styles.headerActions}>
         {currentId && <a className={styles.textLink} href="#">← 返回总览</a>}
+        <button className={`${styles.quietButton} ${styles.textSizeButton}`} aria-label="显示设置" aria-haspopup="dialog" aria-expanded={settingsOpen} title="显示设置" onClick={() => setSettingsOpen(true)}>Aa</button>
         <button className={styles.quietButton} disabled={busy || Boolean(editing)} onClick={() => void openAgents()}><Icon name="people" size={15} />Agent 名单</button>
         {!currentId && <button className={styles.primaryButton} onClick={() => openForm()}><Icon name="plus" />添加项目</button>}
       </div>
@@ -717,6 +736,24 @@ function App() {
         </>}
       </>}
     </main>
+    {settingsOpen && <Modal title="显示设置" close={() => setSettingsOpen(false)}><div className={styles.settingsBody}>
+      <p className={styles.settingsHint}>字号只影响本机显示，不会修改 TASKS.md 或项目记录。选择会保存在此浏览器。</p>
+      <div className={styles.sizeOptions} role="group" aria-label="字号">
+        {textSizeOptions.map(option => <button
+          key={option.value}
+          className={`${styles.sizeOption} ${textSize === option.value ? styles.sizeOptionActive : ''}`.trim()}
+          aria-pressed={textSize === option.value}
+          data-size={option.value}
+          onClick={() => setTextSize(option.value)}
+        >
+          <span className={styles.sizeOptionSample} style={{ fontSize: option.px }}>Aa</span>
+          <span className={styles.sizeOptionLabel}>{option.label}</span>
+          <span className={styles.sizeOptionPx}>{option.px}</span>
+        </button>)}
+      </div>
+      <div className={styles.sizePreview} aria-hidden="true"><span>项目交接单</span><p>停在 v0.20 能力集；下一步按用户安排做真实交接或性能复测。</p></div>
+      <div className={styles.dialogActions}><button className={styles.primary} onClick={() => setSettingsOpen(false)}>完成</button></div>
+    </div></Modal>}
     {agentDraft && <Modal title="Agent 名单" close={() => { if (!busy) setAgentDraft(null); }}><form className={styles.projectForm} onSubmit={saveAgents}>
       <p>每行一个名称，可写工具名或你确认的模型名。名单用于交接时选择署名；改名或移除不会修改过去的留痕。</p>
       <label>Agent 名称<textarea autoFocus className={styles.agentInput} value={agentDraft.value} maxLength={4000} disabled={busy || agentDraft.hash === null} onChange={event => setAgentDraft({ ...agentDraft, value: event.target.value })} placeholder={'Codex\nOpenCode\nTrae'} /></label>
