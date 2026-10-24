@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案屿 · 三个前端方向</title>
+<style>
+  :root{
+    --ink:#171b1a;
+    --muted:#5d6461;
+    --line:#d9dcd7;
+    --paper:#f6f6f3;
+    --sans:"Microsoft YaHei UI","PingFang SC","Noto Sans CJK SC",sans-serif;
+    --mono:"Cascadia Mono","Consolas","SFMono-Regular",monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.75 var(--sans);-webkit-font-smoothing:antialiased;}
+  a{color:inherit;}
+  a:focus-visible{outline:2px solid var(--ink);outline-offset:4px;}
+  .wrap{max-width:1500px;margin:0 auto;padding:48px 44px 56px;}
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:30px;padding-bottom:28px;border-bottom:1px solid var(--line);}
+  .kicker{margin:0 0 8px;font:12px/1.4 var(--mono);letter-spacing:.08em;color:var(--muted);}
+  h1{margin:0;font-size:clamp(30px,3vw,44px);font-weight:600;line-height:1.25;letter-spacing:.01em;}
+  .lede{max-width:720px;margin:16px 0 0;font-size:15px;line-height:1.85;color:var(--muted);}
+  .top-meta{flex:none;max-width:260px;font:12px/1.8 var(--mono);color:var(--muted);text-align:right;}
+  .grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin-top:28px;}
+  .card{display:block;border:1px solid var(--line);background:#fff;text-decoration:none;transition:border-color .15s;}
+  .card:hover{border-color:var(--ink);}
+  .card img{display:block;width:100%;aspect-ratio:16/10;object-fit:cover;border-bottom:1px solid var(--line);}
+  .body{padding:20px 22px 22px;}
+  .tag{font:12px/1.4 var(--mono);color:var(--muted);}
+  h2{margin:5px 0 8px;font-size:27px;font-weight:600;line-height:1.25;}
+  .body p{margin:0;font-size:14px;line-height:1.8;color:var(--muted);}
+  .swatches{display:flex;gap:6px;margin:16px 0 0;padding:0;list-style:none;}
+  .swatches li{width:22px;height:10px;border:1px solid rgba(0,0,0,.12);}
+  .open{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);font-size:13px;color:var(--ink);}
+  .open span:last-child{font:12px/1.4 var(--mono);color:var(--muted);}
+  .compare{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:26px;padding:14px 16px;border:1px solid var(--line);background:#fff;text-decoration:none;}
+  .compare:hover{border-color:var(--ink);}
+  .compare b{font-weight:600;font-size:14px;}
+  .compare span{font:12px/1.5 var(--mono);color:var(--muted);}
+  .chosen{display:flex;align-items:center;justify-content:space-between;gap:30px;margin-top:26px;padding:22px 24px;border:1px solid var(--ink);background:#fff;text-decoration:none;}
+  .chosen:hover .chosen-open{text-decoration:underline;}
+  .chosen .kicker{margin-bottom:5px;}
+  .chosen h2{margin:0;font-size:25px;}
+  .chosen p{margin:7px 0 0;font-size:14px;color:var(--muted);max-width:760px;}
+  .chosen-open{flex:none;font-size:14px;font-weight:600;white-space:nowrap;}
+  .chosen-open span{display:block;margin-top:4px;font:12px/1.4 var(--mono);color:var(--muted);font-weight:400;}
+  .foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-top:34px;padding-top:18px;border-top:1px solid var(--line);font:12px/1.8 var(--mono);color:var(--muted);}
+  @media (max-width:1100px){.grid{grid-template-columns:1fr;} .wrap{padding:34px 24px 44px;} .top{display:block;} .top-meta{text-align:left;margin-top:18px;} }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="kicker">案屿 / 前端方向小样 / 2026-10-24</p>
+      <h1>B 的结构，A 的配色，收一点。</h1>
+      <p class="lede">三个初稿保留在下面供对照。B×A 合版（04）保留了结构，但绿同时做了纸、字、按钮、印章和边线，确实过重。按相邻产品的做法把纸面收回中性、主操作改成墨色，绿只做进行中信号：05 暖中性纸，06 冷灰。先看这两版。</p>
+    </div>
+    <div class="top-meta">已选：B × A<br>配色修订中</div>
+  </header>
+
+  <a class="chosen" href="05-bxA-neutral.html">
+    <div>
+      <p class="kicker">配色修订 / 05 与 06</p>
+      <h2>中性纸，绿只做信号</h2>
+      <p>05：暖灰纸 + 墨色主操作，苔绿只留在进行中印章、左线和品牌，陶土红只做待检查。06：冷灰底，进行中改蓝灰，苔绿只留品牌标记。结构、字号、间距都不动，只换颜色分工。</p>
+    </div>
+    <div class="chosen-open">打开 05 中性纸<span>05-bxA-neutral.html</span></div>
+  </a>
+
+  <main class="grid">
+    <a class="card" href="01-chart.html">
+      <img src="screenshots/01-chart-1440.png" alt="方向 A 海图：左侧项目索引与衬线大标题">
+      <div class="body">
+        <div class="tag">方向 A</div>
+        <h2>海图</h2>
+        <p>左侧项目索引，右侧把“下一步”排成版面主角。安静、编辑感，像在图上标出下一段航程。</p>
+        <ul class="swatches" aria-label="色板">
+          <li style="background:#eef1ea"></li><li style="background:#17363b"></li><li style="background:#2f6b60"></li><li style="background:#a3472f"></li>
+        </ul>
+        <div class="open"><span>打开单文件小样</span><span>01-chart.html</span></div>
+      </div>
+    </a>
+
+    <a class="card" href="02-slip.html">
+      <img src="screenshots/02-slip-1440.png" alt="方向 B 交接单：横向交接单与盖章状态">
+      <div class="body">
+        <div class="tag">方向 B</div>
+        <h2>交接单</h2>
+        <p>每个项目是一张横向待签的交接单：左侧盖章，中间写下一步，右侧放交接动作。直接对应产品里“交出去”的动作。</p>
+        <ul class="swatches" aria-label="色板">
+          <li style="background:#f1eee6"></li><li style="background:#14171a"></li><li style="background:#1c3fd0"></li><li style="background:#855000"></li>
+        </ul>
+        <div class="open"><span>打开单文件小样</span><span>02-slip.html</span></div>
+      </div>
+    </a>
+
+    <a class="card" href="03-nightwatch.html">
+      <img src="screenshots/03-nightwatch-1440.png" alt="方向 C 夜航：深色双栏与常驻当前项目面板">
+      <div class="body">
+        <div class="tag">方向 C</div>
+        <h2>夜航</h2>
+        <p>左侧项目流，右侧常驻当前项目。像夜间值班的驾驶舱：只放大当前要接的那一段，其余压成清晰的列表。</p>
+        <ul class="swatches" aria-label="色板">
+          <li style="background:#0b1416"></li><li style="background:#ece7d8"></li><li style="background:#e2a65a"></li><li style="background:#86b9a2"></li>
+        </ul>
+        <div class="open"><span>打开单文件小样</span><span>03-nightwatch.html</span></div>
+      </div>
+    </a>
+  </main>
+
+  <a class="compare" href="benchmarks/board.png">
+    <b>市场参照</b>
+    <span>benchmarks/board.png / Conductor · Crystal · Vibe · Linear</span>
+  </a>
+  <a class="compare" href="screenshots/compare-palettes.png">
+    <b>配色修订对比</b>
+    <span>screenshots/compare-palettes.png / 04 · 05 · 06</span>
+  </a>
+
+  <a class="compare" href="screenshots/compare.png">
+    <b>三个原始方向</b>
+    <span>screenshots/compare.png / 1468 × 388</span>
+  </a>
+
+  <footer class="foot">
+    <span>示意数据来自案屿的一次真实整理 / 没有改真实项目 / 没有联网</span>
+    <span>已选：B 结构 / 配色在 05 与 06 中选</span>
+  </footer>
+</div>
+</body>
+</html>

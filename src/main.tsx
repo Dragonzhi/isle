@@ -24,13 +24,18 @@ async function api(method = 'GET', suffix = '', input?: unknown, endpoint = '/ap
   return request(method, suffix, input, endpoint);
 }
 
-function Icon({ name }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' }) {
+function Icon({ name, size = 18 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron'; size?: number }) {
   const paths = {
     plus: 'M12 5v14M5 12h14', copy: 'M9 9h11v11H9zM15 9V4H4v11h5',
     arrow: 'M5 12h14m-6-6 6 6-6 6', refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12 0l2 5M4 12l2 5a7 7 0 0 0 12 0',
     close: 'm6 6 12 12M6 18 18 6', island: 'M3 18c3-2 5 2 8 0s5 2 10 0M5 14l6-9 7 9H5Z',
+    edit: 'M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3ZM14 6l4 4',
+    branch: 'M6 3v18M6 6a3 3 0 1 0 0 6 3 3 0 1 0 0-6M18 3a3 3 0 1 0 0 6 3 3 0 1 0 0-6M6 9h6a6 6 0 0 0 6-6',
+    trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6',
+    people: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
+    chevron: 'm9 18 6-6-6-6',
   };
-  return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
+  return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
 
 function Modal({ title, close, children }: { title: string; close: () => void; children: React.ReactNode }) {
@@ -70,6 +75,8 @@ function parseWorktreeInput(text: string, repoName: string) {
 
 type Editing = { id: string; kind: 'next' | 'summary'; value: string; hash: string; baseline: string; conflict?: boolean; reviewed?: boolean };
 type TransferFormat = 'skill' | 'full';
+type ProjectFilter = 'all' | 'active' | 'paused' | 'offline';
+type BoardGroup = { key: string; members: Project[]; multi: boolean; total: number; latest: string; done: boolean };
 function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
   return format === 'skill' ? skillTransfer(project, mode, author, criteria, goal) : mode === 'close' ? closeout(project, author) : handoff(project, criteria, goal, author);
 }
@@ -81,6 +88,7 @@ function App() {
   const [notice, setNotice] = useState<{ message: string; error?: boolean } | null>(null);
   const [onlyStale, setOnlyStale] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [filter, setFilter] = useState<ProjectFilter>('all');
   const [selected, setSelected] = useState('');
   const [editing, setEditing] = useState<Editing | null>(null);
   const [form, setForm] = useState<'add' | Project | null>(null);
@@ -89,6 +97,7 @@ function App() {
   const [installSkill, setInstallSkill] = useState(true);
   const [formError, setFormError] = useState('');
   const [handoffProject, setHandoffProject] = useState<Project | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<Project | null>(null);
   const [handoffMode, setHandoffMode] = useState<'start' | 'close'>('start');
   const [transferFormat, setTransferFormat] = useState<TransferFormat>('full');
   const [goal, setGoal] = useState('');
@@ -143,8 +152,22 @@ function App() {
   const currentId = route.startsWith('#project/') ? route.slice(9) : '';
   const current = projects.find(project => project.id === currentId);
   const done = projects.filter(project => project.status === '已完成');
-  const visible = projects.filter(project => (showDone || project.status !== '已完成') && (!onlyStale || stale(project)));
+  const activeProjects = projects.filter(project => project.status !== '已完成');
+  const tabBase = activeProjects.filter(project => !onlyStale || stale(project));
+  const countTabGroups = (predicate: (project: Project) => boolean) => new Set(tabBase.filter(predicate).map(project => project.group ?? 'project:' + project.id)).size;
+  const filterCounts = {
+    all: countTabGroups(() => true),
+    active: countTabGroups(project => project.state === 'ok' && project.status === '进行中'),
+    paused: countTabGroups(project => project.state === 'ok' && project.status === '暂停'),
+    offline: countTabGroups(project => project.state !== 'ok'),
+  };
+  const matchesFilter = (project: Project) => filter === 'all'
+    || (filter === 'active' && project.state === 'ok' && project.status === '进行中')
+    || (filter === 'paused' && project.state === 'ok' && project.status === '暂停')
+    || (filter === 'offline' && project.state !== 'ok');
+  const visible = projects.filter(project => (showDone || project.status !== '已完成') && (!onlyStale || stale(project)) && matchesFilter(project));
   const oldCount = projects.filter(stale).length;
+  const activeGroupCount = new Set(activeProjects.map(project => project.group ?? 'project:' + project.id)).size;
   const groupTotals = new Map<string, number>();
   for (const project of projects) {
     const key = project.group ?? 'project:' + project.id;
@@ -419,12 +442,12 @@ function App() {
   async function remove(project: Project) {
     if (!data || busy) return;
     setBusy(true);
-    try { accept(await api('DELETE', `/${project.id}`, { registryHash: data.registryHash })); location.hash = ''; setNotice({ message: '项目已移出看板' }); }
-    catch (error) { setNotice({ message: (error as Error).message, error: true }); }
+    try { accept(await api('DELETE', `/${project.id}`, { registryHash: data.registryHash })); setRemoveTarget(null); location.hash = ''; setNotice({ message: '项目已移出看板' }); }
+    catch (error) { setRemoveTarget(null); setNotice({ message: (error as Error).message, error: true }); }
     finally { setBusy(false); }
   }
 
-  function nextEditor(project: Project, showFocus = true) {
+  function nextEditor(project: Project, showFocus = true, showEditHint = true, textEditable = true) {
     const focus = focusTask(project.tasks);
     if (editing?.id === project.id && editing.kind === 'next') return <form className={styles.editForm} onSubmit={saveNext}>
       <input ref={editInput} aria-label={`${project.name}的下一步`} value={editing.value} maxLength={4000} disabled={busy} placeholder="下一步做什么" onChange={event => setEditing({ ...editing, value: event.target.value })} onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.stopPropagation(); setEditing(null); } if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault(); }} />
@@ -434,9 +457,22 @@ function App() {
       {editing.conflict && <button type="button" className={styles.conflict} onClick={() => void reviewConflict()}>文件已变更，点击核对最新内容</button>}
       {editing.reviewed && <div className={styles.comparison}>最新内容：{editing.baseline || '（空）'}。已保留你的输入，确认后可直接保存。</div>}
     </form>;
+    if (!textEditable) return <div className={styles.nextCellContent}>
+      <div className={`${styles.nextButton} ${styles.nextStatic} ${!project.next ? styles.missing : ''}`}>
+        <span className={styles.nextText}>{project.next || '尚未填写下一步'}</span>
+      </div>
+      {showFocus && focus && (
+        <span className={styles.focusTaskChip} title={`当前任务：${focus.title}${focus.tags.length ? ' ' + focus.tags.join(' ') : ''}`}>
+          <span className={styles.focusTaskIcon}>↳</span>
+          <span className={styles.focusTaskTitle}>{focus.title}</span>
+          {focus.tags.map(tag => <small key={tag} className={styles.tag}>{tag}</small>)}
+        </span>
+      )}
+    </div>;
     return <div className={styles.nextCellContent}>
       <button className={`${styles.nextButton} ${!project.next ? styles.missing : ''}`} title={project.next || '点击填写下一步'} onClick={() => startEdit(project)} disabled={project.state !== 'ok' || editing?.kind === 'summary'}>
-        {project.next || '+ 填写下一步'}
+        <span className={styles.nextText}>{project.next || '+ 填写下一步'}</span>
+        {showEditHint && <span className={styles.editHint} aria-hidden="true"><Icon name="edit" size={14} /><span>编辑</span></span>}
       </button>
       {showFocus && focus && (
         <span className={styles.focusTaskChip} title={`当前任务：${focus.title}${focus.tags.length ? ' ' + focus.tags.join(' ') : ''}`}>
@@ -448,53 +484,150 @@ function App() {
     </div>;
   }
 
-  function boardCard(project: Project, grouped = false) {
-    const nameId = 'name-' + project.id;
-    const Name = grouped ? 'h3' : 'h2';
-    return <li id={'project-' + project.id} aria-labelledby={nameId} tabIndex={0} key={project.id} onFocus={() => setSelected(project.id)} onMouseDown={() => setSelected(project.id)} className={[styles.projectCard, grouped && project.role === 'main' ? styles.mainWorkspace : '', selected === project.id ? styles.selected : '', project.state !== 'ok' ? styles.unavailable : ''].filter(Boolean).join(' ')}>
-      {grouped && <p className={styles.workspaceRole}>{project.role === 'main' ? '主工作区' : '分线工作区'}</p>}
-      <div className={styles.cardHeading}>
-        <Name id={nameId} className={styles.projectName}>{project.state === 'offline' ? project.name : <a href={'#project/' + project.id} title={project.name}>{project.name}</a>}</Name>
-        <span className={[styles.status, project.status === '暂停' ? styles.paused : ''].filter(Boolean).join(' ')}><span className={[styles.stateDot, project.status === '进行中' && project.state === 'ok' ? styles.green : ''].filter(Boolean).join(' ')} />{project.state === 'ok' ? project.status : project.state === 'offline' ? '离线' : '读取失败'}</span>
-      </div>
-      <p className={styles.cardPath} title={project.path}>{project.path}</p>
-      <div className={styles.cardBody}>
-        <p className={styles.cardLabel}>{project.state === 'ok' ? '下一步' : '需要检查'}</p>
-        {project.state === 'ok' ? nextEditor(project) : <div className={styles.cardError}><p>{project.error}</p><div className={styles.cardErrorActions}><button className={styles.textButton} onClick={() => openForm(project)}>重新指向 →</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(project)}>移出看板</button></div></div>}
-      </div>
-      <div className={styles.cardFooter}>
-        <span className={[styles.freshness, stale(project) ? project.age >= 14 ? styles.overdue : styles.aging : ''].filter(Boolean).join(' ')} title={project.updated ? project.updated + (project.estimated ? ' (文件时间估值)' : '') : undefined}>{project.state === 'ok' ? '记录更新 · ' : ''}{freshness(project)}</span>
-        <button
-          className={styles.cardTransfer}
-          disabled={project.state !== 'ok' || busy || Boolean(editing)}
-          title="开工 / 收工（c 复制开工词）"
-          aria-label={project.name + '的开工与收工'}
-          onClick={() => void openTransfer(project, 'start')}
-        ><Icon name="copy" />开工 / 收工</button>
-      </div>
-    </li>;
+  function taskOpen(project: Project) { return project.tasks.filter(task => task.state !== '已完成').length; }
+  function taskDone(project: Project) { return project.tasks.filter(task => task.state === '已完成').length; }
+  function statusText(project: Project) {
+    if (project.state === 'offline') return '离线';
+    if (project.state === 'error') return '读取失败';
+    return project.status;
+  }
+  function stampDate(project: Project) { return /^\d{4}-\d{2}-\d{2}$/.test(project.updated) ? project.updated.slice(5) : '—'; }
+  function openProject(project: Project, event: React.MouseEvent) {
+    if ((event.target as HTMLElement).closest('a, button, input, textarea, select, summary, label')) return;
+    location.hash = 'project/' + project.id;
   }
 
-  const date = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
+  function subRow(project: Project) {
+    const offline = project.state !== 'ok';
+    const meta = offline ? '离线' : (project.status === '暂停' ? '暂停 / ' : project.status === '已完成' ? '已完成 / ' : '') + freshness(project);
+    return <div
+      id={'project-' + project.id}
+      key={project.id}
+      className={styles.subRow}
+      onMouseDown={() => setSelected(project.id)}
+      onFocusCapture={() => setSelected(project.id)}
+      onClick={event => { event.stopPropagation(); openProject(project, event); }}
+    >
+      <span className={`${styles.subDot} ${project.status === '暂停' ? styles.subPaused : ''} ${offline ? styles.subOffline : ''}`.trim()} />
+      <a className={styles.subName} href={'#project/' + project.id}>{project.name}<span className={styles.subOpen} aria-hidden="true"><Icon name="chevron" size={14} /></span></a>
+      <span className={styles.subNext}>{offline ? (project.error || '目录不可读') : (project.next || '尚未填写下一步')}</span>
+      <span className={`${styles.subMeta} ${stale(project) ? styles.stale : ''}`.trim()}>{meta}</span>
+      {offline || project.status === '已完成'
+        ? <span className={styles.subMuted}>{offline ? '离线' : '已完成'}</span>
+        : <button className={styles.miniButton} disabled={busy || Boolean(editing)} onClick={() => void openTransfer(project, 'start')} aria-label={project.name + '的交接'}>交接</button>}
+    </div>;
+  }
+
+  function slipCard(group: BoardGroup) {
+    const main = group.members.find(project => project.role === 'main') ?? group.members[0];
+    const extras = group.members.filter(project => project.id !== main.id);
+    const title = group.multi ? groupLabel(projects, group.key) : main.name;
+    const offline = main.state !== 'ok';
+    const finished = main.status === '已完成';
+    const open = group.members.reduce((count, project) => count + taskOpen(project), 0);
+    const count = offline ? '记录不可读' : group.multi
+      ? `${group.members.length === group.total ? group.total + ' 个工作区' : '显示 ' + group.members.length + ' / ' + group.total + ' 个工作区'} / ${open} 项未完成`
+      : `${open} 项未完成 / ${taskDone(main)} 项已完成`;
+    const classes = [
+      styles.slip,
+      group.multi ? styles.slipGroup : '',
+      offline ? styles.slipOffline : '',
+      main.status === '暂停' ? styles.slipPaused : '',
+      finished ? styles.slipDone : '',
+      selected === main.id ? styles.slipSelected : '',
+    ].filter(Boolean).join(' ');
+    return <article
+      id={'project-' + main.id}
+      key={group.key}
+      role="listitem"
+      aria-labelledby={'slip-title-' + main.id}
+      className={classes}
+      onMouseDown={() => setSelected(main.id)}
+      onFocusCapture={() => setSelected(main.id)}
+      onClick={event => openProject(main, event)}
+    >
+      <div className={styles.stamp}><span>{statusText(main)}</span><small>{offline ? '—' : stampDate(main)}</small></div>
+      <div className={styles.slipBody}>
+        <div className={styles.slipTitle}>
+          <h2 id={'slip-title-' + main.id}><a href={'#project/' + main.id}><span className={styles.slipTitleText}>{title}</span><span className={styles.openMark} aria-hidden="true"><Icon name="arrow" size={16} /></span></a></h2>
+          <span className={styles.slipCount}>{count}</span>
+        </div>
+        <p className={styles.slipPath} title={main.path}>{main.path}</p>
+        {offline
+          ? <div className={styles.slipError}><p>{main.error}</p><div className={styles.slipErrorActions}><button className={styles.quietButton} onClick={() => openForm(main)}>重新指向</button><button className={`${styles.quietButton} ${styles.quietDanger}`} disabled={busy} onClick={() => setRemoveTarget(main)}>移出看板</button></div></div>
+          : <div className={styles.slipNext}>{nextEditor(main, !group.multi)}</div>}
+        {group.multi && extras.length > 0 && <div className={styles.subList}>{extras.map(subRow)}</div>}
+      </div>
+      <div className={styles.slipSide}>
+        <span className={`${styles.slipUpdate} ${stale(main) ? styles.stale : ''}`.trim()} title={main.updated ? main.updated + (main.estimated ? ' (文件时间估值)' : '') : undefined}>{offline ? '离线' : freshness(main)}</span>
+        {offline || finished
+          ? <span className={styles.doneLabel}>{offline ? '不可交接' : '已完成'}</span>
+          : <button className={styles.handoffButton} disabled={busy || Boolean(editing)} onClick={() => void openTransfer(main, 'start')} aria-label={title + '的交接'}><Icon name="copy" />交接</button>}
+      </div>
+    </article>;
+  }
+
+  const now = new Date();
+  const date = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()]}`;
   return <div className={styles.app}>
-    <aside className={styles.sidebar}>
-      <a className={styles.brand} href="#"><span className={styles.brandMark}><Icon name="island" /></span><span>案屿<small>ISLE</small></span></a>
-      <div className={styles.navLabel}>工作空间</div>
-      <a className={`${styles.navItem} ${!currentId ? styles.navActive : ''}`} href="#"><Icon name="island" />项目总览<span>{groupTotals.size}</span></a>
-      <button className={styles.agentNav} disabled={busy || Boolean(editing)} onClick={() => void openAgents()}>Agent 名单</button>
-      <div className={styles.sidebarBottom}><small>v0.1</small></div>
-    </aside>
+    <header className={`${styles.siteHeader} ${currentId ? styles.siteHeaderCompact : ''}`}>
+      <a className={styles.brand} href="#" aria-label="案屿项目总览">
+        <span className={styles.brandMark}><Icon name="island" /></span>
+        <span className={styles.brandName}>案屿<small>ISLE</small></span>
+      </a>
+      <div className={styles.headerTitle}>
+        {currentId ? <nav className={styles.crumb} aria-label="面包屑">
+          <a href="#"><span className={styles.crumbArrow} aria-hidden="true">←</span>项目交接单</a>
+          <span className={styles.crumbSep} aria-hidden="true">/</span>
+          <span className={styles.crumbCurrent} aria-current="page">{current?.name || '项目'}</span>
+        </nav> : <>
+          <h1>项目交接单</h1>
+          <p className={styles.headerMeta}><span>{date}</span><span>{activeGroupCount} 个项目</span><span>{activeProjects.length} 个工作区</span><span>{oldCount} 个待检查</span></p>
+        </>}
+      </div>
+      <div className={styles.headerActions}>
+        {currentId && <a className={styles.textLink} href="#">← 返回总览</a>}
+        <button className={styles.quietButton} disabled={busy || Boolean(editing)} onClick={() => void openAgents()}><Icon name="people" size={15} />Agent 名单</button>
+        {!currentId && <button className={styles.primaryButton} onClick={() => openForm()}><Icon name="plus" />添加项目</button>}
+      </div>
+    </header>
     <main className={`${styles.main} ${currentId ? styles.projectPage : ''}`}>
-      <header className={styles.topbar}><span>{date}</span></header>
       {notice && <div className={`${styles.notice} ${notice.error ? styles.noticeError : ''}`} role={notice.error ? 'alert' : 'status'}><span>{notice.message}</span><button aria-label="关闭提示" className={styles.iconButton} onClick={() => setNotice(null)}><Icon name="close" /></button></div>}
       {currentId ? <>
-        <a className={styles.back} href="#">← 返回总览</a>
         {current ? <>
-          <div className={`${styles.heading} ${styles.projectHeading}`}><div><h1>{current.name}</h1><p className={styles.path}>{current.path}</p>{currentGroup && (currentGroup.count > 1 || currentGroup.role === 'worktree') && <p className={styles.groupMeta}>{currentGroup.role === 'main' ? '主工作区 · 共 ' + currentGroup.count + ' 条线' : currentGroup.label + ' · 工作区'}</p>}</div><div className={styles.transferActions}><button className={styles.secondary} disabled={busy || Boolean(editing) || current.state !== 'ok'} onClick={() => void openWorkspacePicker(current)}>添加已有工作区</button><button className={styles.secondary} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" />刷新记录</button><button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button><button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" />交给新 Agent</button></div></div>
+          <section className={styles.projectHead} aria-labelledby="project-title">
+            <div className={styles.projectHeadMain}>
+              <div className={styles.projectKicker}>
+                <span className={`${styles.statusChip} ${current.state !== 'ok' ? styles.statusOffline : current.status === '暂停' ? styles.statusPaused : current.status === '已完成' ? styles.statusDone : ''}`.trim()}>{statusText(current)}</span>
+                {current.state === 'ok' && <span className={styles.projectFresh}>{freshness(current)}</span>}
+                {stale(current) && <span className={styles.projectFlag}>待检查</span>}
+                {currentGroup && (currentGroup.count > 1 || currentGroup.role === 'worktree') && <span className={styles.projectGroupNote}>{currentGroup.role === 'main' ? '主工作区 / 共 ' + currentGroup.count + ' 条线' : currentGroup.label + ' / 工作区'}</span>}
+              </div>
+              <h1 id="project-title" className={styles.projectTitle}>{current.name}</h1>
+              <p className={styles.projectPath} title={current.path}>{current.path}</p>
+            </div>
+            <div className={styles.projectActions}>
+              <button className={styles.primary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'start')}><Icon name="copy" size={16} />交给新 Agent</button>
+              <button className={styles.secondary} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => void openTransfer(current, 'close')}>收工回写</button>
+            </div>
+          </section>
+          <div className={styles.projectUtilities} role="group" aria-label="项目设置与工作区">
+            <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={busy || Boolean(editing) || current.state !== 'ok'} onClick={() => void openWorkspacePicker(current)}><Icon name="plus" size={14} />添加已有工作区</button>
+            <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" size={14} />刷新记录</button>
+            <span className={styles.utilitySpacer} />
+            <button className={`${styles.quietButton} ${styles.utilityButton}`} onClick={() => openForm(current)} disabled={busy || Boolean(editing)}><Icon name="edit" size={14} />修改路径</button>
+            <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={busy || Boolean(editing)} onClick={() => openWorktrees()}><Icon name="branch" size={14} />建工作区</button>
+            <button className={`${styles.quietButton} ${styles.utilityButton} ${styles.quietDanger}`} disabled={busy || Boolean(editing)} onClick={() => setRemoveTarget(current)}><Icon name="trash" size={14} />移出看板</button>
+          </div>
           <section className={styles.contextCard} aria-label="项目下一步">
-            <div className={styles.contextMeta}><span className={styles.status}>{current.status}</span><span>{freshness(current)}</span></div>
-            <p className={styles.fieldLabel}>下一步</p>
-            {nextEditor(current, false)}
+            <div className={styles.contextHead}>
+              <p className={styles.fieldLabel}>下一步</p>
+              <div className={styles.contextHeadActions}>
+                <span className={styles.contextHint}>交接时随记录交给下一位 Agent</span>
+                {!(editing?.id === current.id && editing.kind === 'next') && <button className={styles.quietButton} disabled={current.state !== 'ok' || busy || Boolean(editing)} onClick={() => startEdit(current)}><Icon name="edit" size={14} />编辑</button>}
+              </div>
+            </div>
+            {nextEditor(current, false, false, false)}
             {(() => {
               const focus = focusTask(current.tasks);
               return focus ? <div className={styles.detailFocusTask}>
@@ -517,7 +650,7 @@ function App() {
               <ul className={styles.taskList}>{current.tasks.filter(task => task.state === state).map(task => {
                 const isFocus = focus && task.line === focus.line && task.state !== '已完成';
                 return <li key={task.line} className={`${styles.task} ${state === '已完成' ? styles.doneTask : ''}`}>
-                  <span className={styles.checkbox} aria-label={state === '已完成' ? '已完成' : '未完成'}>{state === '已完成' ? '✓' : ''}</span>
+                  <span className={styles.taskMark} data-done={state === '已完成' ? 'true' : 'false'} aria-hidden="true" />
                   <div className={styles.taskCopy}><span className={styles.taskTitle}>{task.title}</span>
                     {(isFocus || task.tags.length > 0 || task.conflict) && <div className={styles.taskMeta}>
                       {isFocus && <span className={styles.focusBadge}>当前聚焦</span>}
@@ -530,7 +663,7 @@ function App() {
             </Group>;
           })}</div>{!current.tasks.length && <p className={styles.noTasks}>暂无任务</p>}</section>}
           {current.state === 'ok' && <section className={styles.summaryCard} aria-label="交接摘要">
-            <div className={styles.summaryHeading}><h2>交接摘要</h2><div className={styles.transferActions}><button className={styles.textButton} disabled={busy || Boolean(editing) || !current.summary?.trim()} onClick={() => void copySummary(current)}><Icon name="copy" />复制摘要</button><button className={styles.textButton} disabled={busy || Boolean(editing)} onClick={() => startEdit(current, 'summary')}>手动补记</button></div></div>
+            <div className={styles.summaryHeading}><h2>交接摘要</h2><div className={styles.transferActions}><button className={styles.quietButton} disabled={busy || Boolean(editing) || !current.summary?.trim()} onClick={() => void copySummary(current)}><Icon name="copy" size={14} />复制摘要</button><button className={styles.quietButton} disabled={busy || Boolean(editing)} onClick={() => startEdit(current, 'summary')}><Icon name="edit" size={14} />手动补记</button></div></div>
             {editing?.id === current.id && editing.kind === 'summary' ? <form onSubmit={saveNext}>
               <label className={styles.srOnly} htmlFor="summary-input">编辑交接摘要</label>
               <textarea id="summary-input" ref={summaryInput} className={styles.summaryInput} value={editing.value} maxLength={10000} disabled={busy} placeholder={'已确认：\n验证结果：\n未完成或阻塞：\n接着做：'} onChange={event => setEditing({ ...editing, value: event.target.value })} onKeyDown={event => { if (event.key === 'Escape' && !busy) setEditing(null); }} />
@@ -544,7 +677,7 @@ function App() {
             {current.history ? <div className={styles.markdown}><SummaryMarkdown text={current.history} /></div> : <p className={styles.summaryEmpty}>暂无留痕。收工时选择署名，让 Agent 追加本次推进和验证结果；未完成的工作也可以记录。</p>}
           </section>}
           {current.state === 'ok' && git.id === current.id && <section className={styles.gitCard} aria-label="Git 历史">
-            <div className={styles.summaryHeading}><h2>Git 历史</h2><div className={styles.transferActions}><button className={styles.textButton} disabled={busy || git.loading} onClick={() => void loadGit(current)}><Icon name="refresh" />刷新</button><button className={styles.textButton} disabled={busy} onClick={() => void copyGit(current)}><Icon name="copy" />复制提交/推送命令</button></div></div>
+            <div className={styles.summaryHeading}><h2>Git 历史</h2><div className={styles.transferActions}><button className={styles.quietButton} disabled={busy || git.loading} onClick={() => void loadGit(current)}><Icon name="refresh" size={14} />刷新</button><button className={styles.quietButton} disabled={busy} onClick={() => void copyGit(current)}><Icon name="copy" size={14} />复制提交/推送命令</button></div></div>
             {git.loading && <p className={styles.summaryEmpty}>正在读取 git 历史…</p>}
             {!git.loading && git.error && <p className={styles.summaryEmpty}>{git.error}</p>}
             {!git.loading && git.history && !git.history.available && <p className={styles.summaryEmpty}>{git.history.reason || '无法读取 git 历史。'}</p>}
@@ -554,34 +687,33 @@ function App() {
             <p className={styles.gitHint}>只读预览最近的提交；提交与推送由你在终端执行，案屿不主动操作 git、不出网。</p>
           </section>}
           {current.state === 'ok' && <section className={styles.summaryCard} aria-label="项目 Skill">
-            <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.secondary} disabled={busy || skill.loading} onClick={() => void installProjectSkill(current)}>{skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
-            <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}。就绪后可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
+            <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void (skill.status?.state === 'ready' ? loadSkill(current) : installProjectSkill(current))}><Icon name="refresh" size={14} />{skill.status?.state === 'ready' ? '重新检查' : skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
+            <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}{skill.status?.state === 'ready' ? '。' : '；就绪后'}可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
             <p className={styles.skillDescription}>提供 Codex、OpenCode、Claude Code 和 TRAE 的项目入口。补充缺失文件，并把官方旧版升级到当前版本；官方旧版以外的同名文件（含你改过的）保留不覆盖。</p>
             {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{({ ready: '就绪', missing: '缺失', outdated: '官方旧版，可升级', custom: '已有不同内容，未覆盖', error: '无法访问' })[file.state]}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
           </section>}
-          <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><div><button className={styles.textButton} onClick={() => openForm(current)}>修改路径</button><button className={styles.textButton} disabled={busy} onClick={() => openWorktrees()}>建工作区</button><button className={styles.textButton} disabled={busy} onClick={() => void remove(current)}>移出看板</button></div></footer>
+          <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><span>案屿只读取记录、生成文字，不执行命令</span></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
       </> : <>
-        <div className={styles.heading}><div><h1>项目</h1><p className={styles.subtitle}>{projects.length ? `${groupTotals.size} 个项目 · ${projects.length} 个工作区${oldCount ? ` · ${oldCount} 个工作区待检查` : ''}` : '添加本地项目以开始跟踪'}</p></div><button className={styles.primary} onClick={() => openForm()}><Icon name="plus" />添加项目</button></div>
+        <div className={styles.toolbar}>
+          <nav className={styles.tabs} aria-label="筛选项目">
+            {([['all', '全部'], ['active', '进行中'], ['paused', '暂停'], ['offline', '离线']] as const).map(([key, label]) => (
+              <button key={key} className={styles.tab} aria-pressed={filter === key} onClick={() => setFilter(key)}>{label}<span>{filterCounts[key]}</span></button>
+            ))}
+          </nav>
+          <div className={styles.toolbarRight}>
+            <label className={styles.filter}><input type="checkbox" checked={onlyStale} onChange={event => setOnlyStale(event.target.checked)} />只看久未更新</label>
+            <button className={`${styles.iconButton} ${styles.iconButtonBordered}`} aria-label="刷新项目" title="刷新" disabled={loading} onClick={() => void refresh()}><Icon name="refresh" /></button>
+          </div>
+        </div>
         {data?.warnings.length ? <details className={styles.warnings} open><summary>清单有 {data.warnings.length} 条提示</summary><ul>{data.warnings.map((warning, i) => <li key={i}>{warning}</li>)}</ul></details> : null}
         {loading && !data ? <p className={styles.emptyText}>正在读取项目…</p> : !projects.length ? <section className={styles.empty}>
           <div className={styles.emptyIsland}><Icon name="island" /></div><h2>暂无项目</h2><p>添加本地项目目录，案屿将读取其中的 TASKS.md。<br />若文件不存在，会自动创建模板。</p><button className={styles.primary} onClick={() => openForm()}><Icon name="plus" />添加项目</button>
         </section> : <>
-          <div className={styles.toolbar}><span>{onlyStale ? '久未更新' : '全部项目'}<small>{boardGroups.length} 个项目 · {visible.length} 个工作区</small></span><div><label className={styles.filter}><input type="checkbox" checked={onlyStale} onChange={event => setOnlyStale(event.target.checked)} />只看久未更新</label><button className={styles.iconButton} aria-label="刷新项目" title="刷新" disabled={loading} onClick={() => void refresh()}><Icon name="refresh" /></button></div></div>
-          <ul className={styles.projectGrid} role="list" aria-label="项目总览" data-render-ms={renderMs?.toFixed(1)}>
-            {boardGroups.map(group => group.multi
-              ? <li className={styles.projectGroup} key={group.key} aria-labelledby={'group-' + group.members[0].id}>
-                <header className={styles.groupHeader}>
-                  <div><p className={styles.groupEyebrow}>项目</p><h2 id={'group-' + group.members[0].id} className={styles.groupTitle} title={group.key}>{groupLabel(projects, group.key)}</h2></div>
-                  <div className={styles.groupActions}><span className={styles.groupCount}>{group.members.length === group.total ? `${group.total} 个工作区` : `显示 ${group.members.length} / ${group.total} 个工作区`}</span><button className={styles.secondary} disabled={busy || Boolean(editing) || !group.members.some(project => project.state === 'ok')} onClick={() => void openWorkspacePicker(group.members.find(project => project.state === 'ok')!)}>添加已有工作区</button></div>
-                </header>
-                <ul className={styles.workspaceGrid} aria-label={groupLabel(projects, group.key) + '的工作区'}>{group.members.map(project => boardCard(project, true))}</ul>
-              </li>
-              : group.members.map(project => boardCard(project)))}
-          </ul>
+          {boardGroups.length > 0 && <div className={styles.slipList} role="list" aria-label="项目总览" data-render-ms={renderMs?.toFixed(1)}>{boardGroups.map(slipCard)}</div>}
           {!visible.length && <p className={styles.emptyText}>没有符合条件的项目。</p>}
-          {done.length > 0 && <button className={styles.doneToggle} onClick={() => setShowDone(!showDone)}>{showDone ? '▾' : '▸'} {done.length} 个已完成工作区{showDone ? ' · 收起' : ' · 展开'}</button>}
-          <footer className={styles.listFooter}><span /><div><kbd>j</kbd><kbd>k</kbd> 移动 <kbd>↵</kbd> 查看 <kbd>c</kbd> 复制开工词</div></footer>
+          {done.length > 0 && <button className={styles.doneToggle} onClick={() => setShowDone(!showDone)}>{showDone ? '▾' : '▸'} {done.length} 个已完成工作区{showDone ? ' / 收起' : ' / 展开'}</button>}
+          <footer className={styles.listFooter}><span>记录保存在各项目的 TASKS.md</span><div><kbd>j</kbd><kbd>k</kbd> 移动 <kbd>↵</kbd> 查看 <kbd>c</kbd> 复制开工词</div></footer>
         </>}
       </>}
     </main>
@@ -594,6 +726,10 @@ function App() {
     {form && <Modal title={form === 'add' ? '添加项目' : '重新指向'} close={() => { if (!busy) setForm(null); }}><form onSubmit={register} className={styles.projectForm}><label>项目目录<input autoFocus required value={formPath} onChange={event => setFormPath(event.target.value)} placeholder={'D:\\work\\my-project'} disabled={busy} autoComplete="off" /></label><label>项目名称 <span>可选，留空使用目录名</span><input value={formName} maxLength={120} onChange={event => setFormName(event.target.value)} placeholder="例如：棱镜" disabled={busy} /></label>
       <label className={styles.skillInstallLabel}><input type="checkbox" checked={installSkill} disabled={busy} onChange={event => setInstallSkill(event.target.checked)} /><span>安装项目级案屿 Skill<small>生成 .agents、.claude、.trae 的项目入口；官方旧版会升级，改过的同名文件不覆盖。</small></span></label>
       {formError && <p className={styles.formError} role="alert">{formError}</p>}<div className={styles.dialogActions}><button type="button" className={styles.secondary} disabled={busy} onClick={() => setForm(null)}>取消</button><button className={styles.primary} disabled={busy}>{busy ? '正在保存…' : form === 'add' ? '添加项目' : '保存'}</button></div></form></Modal>}
+    {removeTarget && <Modal title="移出看板" close={() => { if (!busy) setRemoveTarget(null); }}><div className={styles.projectForm}>
+      <p>将「{removeTarget.name}」移出看板？项目目录和 TASKS.md 不会被删除，之后仍可重新添加。</p>
+      <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setRemoveTarget(null)}>取消</button><button className={`${styles.primary} ${styles.dangerButton}`} disabled={busy} onClick={() => void remove(removeTarget)}>{busy ? '正在移出…' : '移出看板'}</button></div>
+    </div></Modal>}
     {handoffProject && <Modal title={handoffMode === 'close' ? '收工回写' : '交给新 Agent'} close={() => setHandoffProject(null)}><div className={styles.projectForm}>
       <div className={styles.transferTabs} role="group" aria-label="交接阶段"><button disabled={busy} aria-pressed={handoffMode === 'close'} onClick={() => { setHandoffMode('close'); setTransferNote(''); }}>1 · 收工词</button><span>→</span><button disabled={busy} aria-pressed={handoffMode === 'start'} onClick={() => { setHandoffMode('start'); setTransferNote(''); }}>2 · 开工词</button></div>
       <p>{handoffMode === 'close' ? '发给正在工作的 Agent，让它整理实际结果并回写。回写后刷新，再把开工词交给下一家。' : '带上最新记录，交给下一位 Agent 接着做。打开和复制时都会重新读取任务文件。'}</p>
@@ -602,7 +738,7 @@ function App() {
       <label>{handoffMode === 'close' ? '本次署名' : '接手 Agent'}<select aria-describedby="author-hint" disabled={busy} value={authors[handoffMode]} onChange={event => { setAuthors({ ...authors, [handoffMode]: event.target.value }); setTransferNote(''); }}>
         <option value="">未指定，由 Agent 向我确认署名</option>
         {[...new Set([...(data?.agents ?? []), ...(authors[handoffMode] ? [authors[handoffMode]] : [])])].map(name => <option key={name} value={name}>{name}</option>)}
-      </select></label><span id="author-hint" className={styles.authorHint}>收工时追加本次贡献并署名。自定义名称可在侧栏“Agent 名单”中维护。</span>
+      </select></label><span id="author-hint" className={styles.authorHint}>收工时追加本次贡献并署名。自定义名称可在页头“Agent 名单”中维护。</span>
       {handoffMode === 'start' && <><label>本次目标 <span>可选</span><input disabled={busy} value={goal} maxLength={1000} onChange={event => setGoal(event.target.value)} placeholder="留空按下一步继续，也可以指定这次要做的事" /></label><label>完成标准 <span>可选</span><input disabled={busy} value={criteria} maxLength={800} onChange={event => setCriteria(event.target.value)} placeholder="例如：通过所有单元测试" /></label></>}
       <textarea className={`${styles.handoff} ${transferFormat === 'skill' ? styles.shortInstruction : ''}`} aria-label={handoffMode === 'close' ? '收工词预览' : '开工词预览'} readOnly value={transferText(handoffProject, handoffMode, transferFormat, authors[handoffMode], criteria, goal)} onFocus={event => event.target.select()} />
       {handoffMode === 'close' && <details className={styles.summaryPreview}><summary>当前交接摘要</summary><div className={styles.markdown}><SummaryMarkdown text={handoffProject.summary || '暂无摘要。'} /></div></details>}

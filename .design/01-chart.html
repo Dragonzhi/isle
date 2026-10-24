@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案屿 · 方向 A · 海图</title>
+<style>
+  :root{
+    --paper:#eef1ea;
+    --sheet:#f7f8f3;
+    --ink:#17363b;
+    --ink-2:#2b4a4e;
+    --muted:#5b6b69;
+    --line:#c8d1c6;
+    --teal:#2f6b60;
+    --signal:#a3472f;
+    --serif:"Songti SC","STSong","SimSun","Noto Serif CJK SC",serif;
+    --sans:"Microsoft YaHei UI","PingFang SC","Noto Sans CJK SC",sans-serif;
+    --mono:"Cascadia Mono","Consolas","SFMono-Regular",monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{background:var(--paper);color:var(--ink);font:15px/1.7 var(--sans);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  button{font:inherit;color:inherit;}
+  button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--teal);outline-offset:4px;}
+  .app{display:grid;grid-template-columns:264px minmax(0,1fr);min-height:100vh;}
+  .rail{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;padding:34px 24px 24px;border-right:1px solid var(--line);background:var(--paper);}
+  .brand{display:flex;align-items:center;gap:12px;color:var(--ink);}
+  .brand svg{width:32px;height:32px;flex:none;}
+  .brand .name{display:block;font-family:var(--serif);font-size:26px;font-weight:600;line-height:1.1;letter-spacing:.02em;}
+  .brand .latin{display:block;margin-top:4px;font:12px/1 var(--mono);letter-spacing:.16em;color:var(--muted);}
+  .today{margin:30px 0 34px;font:12px/1.8 var(--mono);color:var(--muted);}
+  .today b{display:block;color:var(--ink-2);font-weight:400;}
+  .rail-head{display:flex;justify-content:space-between;align-items:baseline;padding:0 2px 10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);}
+  .index{display:flex;flex-direction:column;gap:2px;margin-top:10px;overflow:auto;padding-bottom:12px;}
+  .index-item{display:flex;align-items:flex-start;gap:10px;width:100%;padding:9px 8px 9px 7px;border:0;border-left:2px solid transparent;background:none;text-align:left;cursor:pointer;}
+  .index-item:hover{background:rgba(23,54,59,.045);}
+  .index-item[aria-current="true"]{border-left-color:var(--teal);background:rgba(23,54,59,.06);}
+  .index-item strong{display:block;font-size:14px;font-weight:600;line-height:1.45;color:var(--ink-2);}
+  .index-item small{display:block;margin-top:1px;font:12px/1.45 var(--sans);color:var(--muted);}
+  .index-children{margin:0 0 0 17px;padding-left:8px;border-left:1px solid var(--line);}
+  .index-children .index-item{padding-top:7px;padding-bottom:7px;}
+  .index-children .index-item strong{font-size:13px;font-weight:500;}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none;margin-top:7px;background:var(--teal);}
+  .dot.paused{background:#8a6b32;}
+  .dot.offline{background:#8b918c;}
+  .rail-foot{margin-top:auto;padding-top:18px;border-top:1px solid var(--line);font:12px/1.8 var(--sans);color:var(--muted);}
+  .rail-foot .local{display:flex;align-items:center;gap:7px;}
+  .rail-foot .local .dot{margin-top:0;width:6px;height:6px;}
+  .main{min-width:0;width:100%;max-width:1300px;margin:0 auto;padding:34px 48px 48px;}
+  .masthead{display:flex;align-items:center;gap:18px;padding-bottom:16px;border-bottom:1px solid var(--line);}
+  .crumb{font-size:13px;color:var(--muted);}
+  .crumb b{font-weight:600;color:var(--ink);}
+  .mast-meta{margin-left:auto;font:12px/1.4 var(--mono);color:var(--muted);}
+  .ghost{border:1px solid var(--line);background:none;padding:9px 14px;font-size:13px;cursor:pointer;}
+  .ghost:hover{border-color:var(--ink);}
+  .hero{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:40px;padding:54px 0 50px;border-bottom:1px solid var(--line);}
+  .kicker{margin:0 0 14px;font-size:13px;font-weight:600;color:var(--teal);}
+  .hero h1{margin:0;font-family:var(--serif);font-size:clamp(32px,3.3vw,50px);font-weight:600;line-height:1.38;letter-spacing:.01em;text-wrap:balance;}
+  .hero-meta{display:flex;flex-wrap:wrap;gap:6px 18px;margin:24px 0 0;font-size:13px;color:var(--muted);}
+  .hero-meta strong{font-weight:600;color:var(--ink);}
+  .hero-path{margin:6px 0 0;font:12px/1.6 var(--mono);color:var(--muted);overflow-wrap:anywhere;}
+  .hero-actions{display:flex;align-items:center;gap:18px;margin-top:28px;flex-wrap:wrap;}
+  .solid{border:1px solid var(--ink);background:var(--ink);color:var(--paper);padding:11px 18px;font-size:14px;cursor:pointer;}
+  .solid:hover{background:var(--teal);border-color:var(--teal);}
+  .solid:disabled{opacity:.45;cursor:not-allowed;}
+  .quiet{border:0;background:none;padding:4px 0;font-size:13px;color:var(--teal);cursor:pointer;text-decoration:underline;text-underline-offset:4px;}
+  .hero-side{border-left:1px solid var(--line);padding-left:24px;align-self:start;}
+  .hero-side dl{margin:0;display:grid;gap:18px;}
+  .hero-side dt{font-size:12px;color:var(--muted);}
+  .hero-side dd{margin:4px 0 0;font:14px/1.5 var(--mono);color:var(--ink-2);}
+  .board{padding-top:30px;}
+  .board-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:10px;}
+  .board-head h2{margin:0;font-size:15px;font-weight:600;}
+  .board-head span{font-size:12px;color:var(--muted);}
+  .rows{border-top:1px solid var(--line);}
+  .proj{display:grid;grid-template-columns:10px minmax(130px,1fr) minmax(0,2.1fr) 128px 44px;gap:16px;align-items:center;width:100%;padding:17px 6px;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;cursor:pointer;}
+  .proj:hover{background:rgba(23,54,59,.04);}
+  .proj .pname{font-family:var(--serif);font-size:21px;font-weight:600;line-height:1.4;}
+  .proj .pnext{font-size:14px;line-height:1.65;color:var(--ink-2);}
+  .proj .pmeta{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font:12px/1.5 var(--mono);color:var(--muted);text-align:right;}
+  .proj .pmeta.stale{color:var(--signal);}
+  .proj .pws{color:var(--muted);white-space:nowrap;}
+  .proj .popen{font-size:12px;color:var(--teal);text-align:right;}
+  .done-line{display:flex;align-items:center;justify-content:space-between;margin:18px 0 0;font-size:12px;color:var(--muted);}
+  .done-line button{border:0;background:none;color:var(--teal);font-size:12px;text-decoration:underline;text-underline-offset:3px;cursor:pointer;}
+  .foot{margin-top:40px;padding-top:18px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;}
+  dialog.handoff{width:min(640px,calc(100vw - 32px));margin:auto;border:1px solid var(--line);background:var(--sheet);color:var(--ink);padding:0;max-height:88vh;overflow:auto;}
+  dialog.handoff::backdrop{background:rgba(23,54,59,.38);}
+  .dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:24px 26px 18px;border-bottom:1px solid var(--line);}
+  .dialog-head h2{margin:0;font-family:var(--serif);font-size:26px;font-weight:600;line-height:1.3;}
+  .dialog-head small{display:block;margin-top:5px;font:12px/1.5 var(--mono);color:var(--muted);}
+  .close{border:0;background:none;font-size:22px;line-height:1;cursor:pointer;padding:2px 4px;color:var(--muted);}
+  .dialog-body{padding:20px 26px 24px;}
+  .phase{display:flex;border-bottom:1px solid var(--line);}
+  .phase button{flex:1;border:0;border-bottom:2px solid transparent;background:none;padding:11px 6px 13px;font-size:14px;color:var(--muted);cursor:pointer;text-align:left;}
+  .phase button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--teal);font-weight:600;}
+  .phase button span{display:block;margin-top:2px;font:12px/1.4 var(--mono);color:var(--muted);font-weight:400;}
+  .preview-label{display:block;margin:18px 0 7px;font-size:12px;color:var(--muted);}
+  textarea.preview{display:block;width:100%;height:170px;resize:vertical;border:1px solid var(--line);background:#fbfcf7;padding:12px;font:12px/1.75 var(--mono);color:var(--ink-2);}
+  .dialog-foot{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:18px;flex-wrap:wrap;}
+  .dialog-foot p{margin:0;font-size:12px;color:var(--muted);max-width:340px;}
+  .dialog-actions{display:flex;gap:10px;}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s;z-index:20;}
+  .toast.on{opacity:1;}
+  @media (max-width:1000px){
+    .app{grid-template-columns:220px minmax(0,1fr);}
+    .main{padding:28px 30px 40px;}
+    .hero{grid-template-columns:minmax(0,1fr) 170px;gap:28px;}
+    .proj{grid-template-columns:10px 140px minmax(0,1fr) 112px;}
+    .proj .popen{display:none;}
+  }
+  @media (max-width:760px){
+    .app{display:block;}
+    .rail{position:static;height:auto;padding:20px;border-right:0;border-bottom:1px solid var(--line);}
+    .today{display:none;}
+    .rail-head{margin-top:20px;}
+    .index{flex-direction:row;gap:6px;overflow-x:auto;padding-bottom:6px;}
+    .index-item{min-width:max-content;border-left:0;border-bottom:2px solid transparent;padding:8px 10px;}
+    .index-item[aria-current="true"]{border-left:0;border-bottom-color:var(--teal);}
+    .index-children{display:none;}
+    .rail-foot{display:none;}
+    .main{padding:20px 18px 30px;}
+    .masthead{flex-wrap:wrap;gap:10px;}
+    .mast-meta{order:3;width:100%;margin:0;font-size:12px;}
+    .ghost{margin-left:auto;padding:8px 11px;font-size:12px;}
+    .hero{display:block;padding:30px 0 32px;}
+    .hero h1{font-size:30px;line-height:1.45;}
+    .hero-side{border-left:0;border-top:1px solid var(--line);margin-top:26px;padding:18px 0 0;}
+    .hero-side dl{display:flex;flex-wrap:wrap;gap:12px 24px;}
+    .board{padding-top:24px;}
+    .proj{grid-template-columns:8px minmax(0,1fr) auto;gap:10px 12px;padding:14px 2px;}
+    .proj .pname{font-size:19px;}
+    .proj .pnext{grid-column:2 / -1;font-size:14px;}
+    .proj .pmeta{grid-column:3;grid-row:1;font-size:12px;}
+    .proj .popen{display:none;}
+    .board-head span{font-size:12px;}
+    .foot{display:block;line-height:1.9;}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail">
+    <div class="brand" aria-label="案屿">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M2.5 23.5c4-2.5 6.8 2.5 11 0s6.9 2.5 16 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+        <path d="M6 18.5l7.2-10.2L21 18.5H6Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+      </svg>
+      <span><span class="name">案屿</span><span class="latin">ISLE</span></span>
+    </div>
+    <p class="today">2026 · 10 · 23<b>周五 / 本机</b></p>
+    <div class="rail-head"><span>项目</span><span>6</span></div>
+    <nav class="index" id="index" aria-label="项目索引">
+      <button class="index-item" data-id="isle" aria-current="true"><span class="dot"></span><span><strong>案屿</strong><small>4 项未完成</small></span></button>
+      <button class="index-item" data-id="prism"><span class="dot"></span><span><strong>棱镜 Prism</strong><small>3 项未完成</small></span></button>
+      <button class="index-item" data-id="muse"><span class="dot"></span><span><strong>缪斯 Muse</strong><small>3 个工作区</small></span></button>
+      <div class="index-children">
+        <button class="index-item" data-id="orbit"><span class="dot"></span><span><strong>视觉方向</strong><small>今天</small></span></button>
+        <button class="index-item" data-id="ledger"><span class="dot"></span><span><strong>数据方向</strong><small>昨天</small></span></button>
+      </div>
+      <button class="index-item" data-id="story"><span class="dot"></span><span><strong>叙事工坊</strong><small>12 天前</small></span></button>
+      <button class="index-item" data-id="archive"><span class="dot paused"></span><span><strong>山海资料库</strong><small>暂停</small></span></button>
+      <button class="index-item" data-id="offline"><span class="dot offline"></span><span><strong>迁走的项目</strong><small>离线</small></span></button>
+    </nav>
+    <div class="rail-foot">
+      <div class="local"><span class="dot"></span>本机运行 / 不上传</div>
+      <div>记录保存在各项目的 TASKS.md</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="masthead">
+      <div class="crumb">项目总览 <span>/</span> <b id="crumbName">案屿</b></div>
+      <div class="mast-meta">6 个项目 / 8 个工作区 / 1 个待检查</div>
+      <button class="ghost" id="addBtn">添加项目</button>
+    </header>
+
+    <section class="hero" aria-labelledby="heroTitle">
+      <div>
+        <p class="kicker" id="heroKicker">下一步</p>
+        <h1 id="heroTitle">停在 v0.20 能力集；下一步按用户安排做真实交接或性能复测</h1>
+        <div class="hero-meta" id="heroMeta"></div>
+        <p class="hero-path" id="heroPath">C:\Users\32485\Desktop\_项目\案屿</p>
+        <div class="hero-actions">
+          <button class="solid" id="handoffBtn">交接</button>
+          <button class="quiet" id="retryBtn" hidden>重新指向</button>
+        </div>
+      </div>
+      <aside class="hero-side">
+        <dl>
+          <div><dt>状态</dt><dd id="sideStatus">进行中</dd></div>
+          <div><dt>工作区</dt><dd id="sideWorkspaces">1</dd></div>
+          <div><dt>最近记录</dt><dd id="sideUpdated">今天 23:41</dd></div>
+        </dl>
+      </aside>
+    </section>
+
+    <section class="board">
+      <div class="board-head"><h2>其余项目</h2><span id="boardCount">5 个项目</span></div>
+      <div class="rows" id="rows"></div>
+      <div class="done-line"><span>全部记录来自各项目的 TASKS.md</span><span>本机 / 不联网</span></div>
+    </section>
+
+    <footer class="foot"><span>案屿只生成交接文字，不执行命令，也不上传记录。</span><span>方向 A · 海图</span></footer>
+  </main>
+</div>
+
+<dialog class="handoff" id="handoffDialog" aria-labelledby="handoffTitle">
+  <div class="dialog-head">
+    <div><h2 id="handoffTitle">交接 · 案屿</h2><small id="handoffMeta">署名未指定 / 今天 23:41</small></div>
+    <button class="close" id="closeDialog" aria-label="关闭">×</button>
+  </div>
+  <div class="dialog-body">
+    <div class="phase" role="group" aria-label="交接阶段">
+      <button data-mode="close" aria-pressed="false">1 收工回写<span>发给当前 Agent，整理结果并回写 TASKS.md</span></button>
+      <button data-mode="start" aria-pressed="true">2 开工交接<span>带上最新记录，交给下一位 Agent</span></button>
+    </div>
+    <label class="preview-label" for="prompt">将要发送的文字</label>
+    <textarea class="preview" id="prompt" readonly></textarea>
+    <div class="dialog-foot">
+      <p>案屿只生成文字，不执行命令，也不上传记录。收工后再刷新一次记录。</p>
+      <div class="dialog-actions"><button class="ghost" id="cancel">取消</button><button class="solid" id="copy">复制文字</button></div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const projects = {
+  isle: {name:'案屿', state:'ok', parent:null, next:'停在 v0.20 能力集；下一步按用户安排做真实交接或性能复测', open:4, done:22, updated:'今天 23:41', workspaces:1, path:'C:\\Users\\32485\\Desktop\\_项目\\案屿'},
+  prism: {name:'棱镜 Prism', state:'ok', parent:null, next:'材质处理已调整，界面未验证；下一步补边界样例并重跑视觉回归', open:3, done:42, updated:'今天 18:02', workspaces:1, path:'D:\\work\\prism'},
+  muse: {name:'缪斯 Muse', state:'ok', parent:null, next:'主工作区：先把素材索引合并回 main，再开新的方向', open:3, done:12, updated:'今天 17:20', workspaces:3, path:'D:\\work\\muse'},
+  orbit: {name:'缪斯 · 视觉方向', state:'ok', parent:'muse', next:'球体材质定稿；下一步导出三档性能对照图', open:2, done:5, updated:'今天 16:40', workspaces:1, path:'D:\\work\\muse-orbit'},
+  ledger: {name:'缪斯 · 数据方向', state:'ok', parent:'muse', next:'账本结构已定；下一步补导入脚本的错误分支', open:1, done:9, updated:'昨天 22:10', workspaces:1, path:'D:\\work\\muse-ledger'},
+  story: {name:'叙事工坊', state:'ok', parent:null, next:'第一章结构已确认；下一步整理人物关系和冲突线', open:1, done:0, updated:'12 天前', workspaces:1, path:'D:\\work\\story', stale:true},
+  archive: {name:'山海资料库 · 地方影像与口述记录整理', state:'paused', parent:null, next:'材料已提交；等待补充授权文件后再继续整理', open:2, done:8, updated:'21 天前', workspaces:1, path:'D:\\work\\archive'},
+  offline: {name:'迁走的项目', state:'offline', parent:null, next:'', open:0, done:0, updated:'离线', workspaces:1, path:'D:\\work\\moved-away'}
+};
+const tops = ['isle','prism','muse','story','archive','offline'];
+let current = 'isle';
+let mode = 'start';
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+let toastTimer;
+function toast(message){
+  const el = $('#toast');
+  el.textContent = message;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2200);
+}
+
+function syncCurrent(){
+  $$('.index-item, .proj').forEach(el => {
+    if (el.dataset.id) el.setAttribute('aria-current', el.dataset.id === current ? 'true' : 'false');
+  });
+}
+
+function renderHero(){
+  const p = projects[current];
+  const offline = p.state === 'offline';
+  $('#crumbName').textContent = p.name;
+  $('#heroKicker').textContent = offline ? '需要检查' : '下一步';
+  $('#heroTitle').textContent = offline ? '目录不存在或无法读取，请检查路径。' : p.next;
+  $('#heroMeta').innerHTML = offline
+    ? '<strong>' + p.name + '</strong><span>记录不可读</span>'
+    : '<strong>' + p.name + '</strong><span>' + p.updated + '</span><span>' + p.open + ' 项未完成</span><span>' + p.done + ' 项已完成</span>';
+  $('#heroPath').textContent = p.path;
+  $('#heroPath').hidden = offline;
+  $('#sideStatus').textContent = offline ? '离线' : (p.state === 'paused' ? '暂停' : '进行中');
+  $('#sideWorkspaces').textContent = offline ? '—' : String(p.workspaces);
+  $('#sideUpdated').textContent = offline ? '—' : p.updated;
+  const handoff = $('#handoffBtn');
+  handoff.disabled = offline;
+  handoff.textContent = offline ? '不可交接' : '交接';
+  handoff.hidden = false;
+  $('#retryBtn').hidden = !offline;
+}
+
+function renderRows(){
+  const p = projects[current];
+  const exclude = p.parent || current;
+  const list = tops.filter(id => id !== exclude);
+  $('#boardCount').textContent = list.length + ' 个项目';
+  $('#rows').innerHTML = list.map(id => {
+    const q = projects[id];
+    const offline = q.state === 'offline';
+    const stale = q.stale ? ' stale' : '';
+    const dot = q.state === 'paused' ? 'paused' : offline ? 'offline' : '';
+    const meta = offline
+      ? '<span>离线</span>'
+      : '<span>' + q.updated + '</span>' + (q.workspaces > 1 ? '<span class="pws">' + q.workspaces + ' 个工作区</span>' : '');
+    return '<button class="proj" data-id="' + id + '">' +
+      '<span class="dot ' + dot + '"></span>' +
+      '<span class="pname">' + q.name + '</span>' +
+      '<span class="pnext">' + (offline ? '目录不存在或无法读取。' : q.next) + '</span>' +
+      '<span class="pmeta' + stale + '">' + meta + '</span>' +
+      '<span class="popen">打开</span>' +
+    '</button>';
+  }).join('');
+  syncCurrent();
+}
+
+function select(id){
+  if (!projects[id]) return;
+  current = id;
+  renderHero();
+  renderRows();
+}
+
+function promptText(which){
+  const p = projects[current];
+  if (which === 'close') {
+    return '使用案屿 Skill 执行收工回写，署名未指定，请先向我确认。\n' +
+      '项目：' + p.name + '\n' +
+      '路径：' + p.path + '\n' +
+      '本次记录：' + p.next + '\n' +
+      '请更新 TASKS.md 的 next、交接摘要与工作留痕，然后告知我结果。';
+  }
+  return '使用案屿 Skill 读取项目记录后接着做，先确认你看到的下一步。\n' +
+    '项目：' + p.name + '\n' +
+    '路径：' + p.path + '\n' +
+    '下一步：' + p.next + '\n' +
+    '如记录不明确，先向我确认再开始。';
+}
+
+function updatePreview(){
+  $('#prompt').value = promptText(mode);
+  $$('.phase button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false'));
+}
+
+function openHandoff(){
+  const p = projects[current];
+  if (p.state === 'offline') return;
+  $('#handoffTitle').textContent = '交接 · ' + p.name;
+  $('#handoffMeta').textContent = '署名未指定 / ' + p.updated;
+  mode = 'start';
+  updatePreview();
+  $('#handoffDialog').showModal();
+}
+
+$('#index').addEventListener('click', event => {
+  const item = event.target.closest('[data-id]');
+  if (item) select(item.dataset.id);
+});
+$('#rows').addEventListener('click', event => {
+  const item = event.target.closest('[data-id]');
+  if (item) select(item.dataset.id);
+});
+$('#handoffBtn').addEventListener('click', openHandoff);
+$('#retryBtn').addEventListener('click', () => toast('方向小样：重新指向流程未接入。'));
+$('#addBtn').addEventListener('click', () => toast('方向小样：添加项目流程未接入。'));
+$$('.phase button').forEach(button => button.addEventListener('click', () => { mode = button.dataset.mode; updatePreview(); }));
+$('#closeDialog').addEventListener('click', () => $('#handoffDialog').close());
+$('#cancel').addEventListener('click', () => $('#handoffDialog').close());
+$('#handoffDialog').addEventListener('click', event => { if (event.target === $('#handoffDialog')) $('#handoffDialog').close(); });
+$('#copy').addEventListener('click', async () => {
+  const text = $('#prompt').value;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('已复制。');
+  } catch {
+    $('#prompt').focus();
+    $('#prompt').select();
+    toast('已选中文字，请手动复制。');
+  }
+});
+
+renderHero();
+renderRows();
+syncCurrent();
+</script>
+</body>
+</html>

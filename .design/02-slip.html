@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案屿 · 方向 B · 交接单</title>
+<style>
+  :root{
+    --paper:#f1eee6;
+    --sheet:#fffdf8;
+    --ink:#14171a;
+    --ink-2:#2b3034;
+    --muted:#5b6064;
+    --line:#d6d0c3;
+    --line-dark:#b8b1a2;
+    --blue:#1c3fd0;
+    --blue-dark:#15329f;
+    --blue-soft:#e9edfb;
+    --amber:#855000;
+    --red:#a12c20;
+    --head:"SimHei","Microsoft YaHei UI","PingFang SC",sans-serif;
+    --sans:"Microsoft YaHei UI","PingFang SC","Noto Sans CJK SC",sans-serif;
+    --mono:"Cascadia Mono","Consolas","SFMono-Regular",monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{background:var(--paper);color:var(--ink);font:15px/1.7 var(--sans);-webkit-font-smoothing:antialiased;}
+  button{font:inherit;color:inherit;}
+  button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--blue);outline-offset:3px;}
+  .head{display:grid;grid-template-columns:210px minmax(0,1fr) auto;gap:36px;align-items:end;padding:26px 40px 20px;border-bottom:2px solid var(--ink);}
+  .brand{display:flex;align-items:center;gap:11px;color:var(--ink);}
+  .brand svg{width:30px;height:30px;flex:none;}
+  .brand .name{display:block;font:700 23px/1 var(--head);letter-spacing:.04em;}
+  .brand .latin{display:block;margin-top:4px;font:12px/1 var(--mono);letter-spacing:.2em;color:var(--muted);}
+  .head-title h1{margin:0;font:700 36px/1.08 var(--head);letter-spacing:.02em;}
+  .head-title p{display:flex;flex-wrap:wrap;gap:2px 14px;margin:8px 0 0;font:12px/1.5 var(--mono);color:var(--muted);}
+  .head-title p span{white-space:nowrap;}
+  .add{border:1px solid var(--blue);background:var(--blue);color:#fff;padding:11px 18px;font-size:14px;cursor:pointer;}
+  .add:hover{background:var(--blue-dark);border-color:var(--blue-dark);}
+  .tabs{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:24px;padding:0 40px;border-bottom:1px solid var(--line);background:var(--paper);}
+  .tabs button{border:0;border-bottom:2px solid transparent;background:none;padding:14px 0 12px;font-size:14px;color:var(--muted);cursor:pointer;}
+  .tabs button span{margin-left:5px;font:12px/1 var(--mono);color:var(--muted);}
+  .tabs button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--blue);font-weight:600;}
+  .board{width:100%;max-width:1180px;margin:0 auto;padding:24px 40px 44px;}
+  .slip{display:grid;grid-template-columns:112px minmax(0,1fr) 156px;border:1px solid var(--line);border-left:3px solid var(--blue);background:var(--sheet);margin-bottom:12px;transition:border-color .12s;}
+  .slip:hover{border-color:var(--line-dark);border-left-color:var(--blue);}
+  .slip.paused{border-left-color:var(--amber);}
+  .slip.offline{border-left-color:#7e837f;background:#f3f1ea;}
+  .stamp{padding:22px 0 0 20px;}
+  .stamp span{display:inline-block;border:1.5px solid var(--blue);padding:4px 7px;font:700 12px/1 var(--sans);color:var(--blue);letter-spacing:.06em;}
+  .stamp small{display:block;margin-top:8px;font:12px/1.4 var(--mono);color:var(--muted);}
+  .paused .stamp span{border-color:var(--amber);color:var(--amber);}
+  .offline .stamp span{border-color:#777c78;color:#5f6460;}
+  .slip-body{padding:19px 26px 20px 0;min-width:0;}
+  .slip-title{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;}
+  .slip-title h2{margin:0;font:700 25px/1.3 var(--head);letter-spacing:.01em;overflow-wrap:anywhere;}
+  .count{font:12px/1.5 var(--mono);color:var(--muted);white-space:nowrap;}
+  .flag{display:inline-block;margin-left:2px;border:1px solid var(--red);padding:1px 5px;font:12px/1.5 var(--sans);color:var(--red);white-space:nowrap;}
+  .next{margin:9px 0 0;font-size:17px;line-height:1.65;text-wrap:pretty;}
+  .path{margin:9px 0 0;font:12px/1.5 var(--mono);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .offline .next{color:var(--ink-2);}
+  .subs{margin-top:14px;border-top:1px dashed var(--line);}
+  .sub{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:16px;align-items:baseline;padding:10px 0;border-bottom:1px dashed var(--line);}
+  .sub:last-child{border-bottom:0;padding-bottom:0;}
+  .sub-name{font-size:14px;font-weight:600;}
+  .sub-next{font-size:14px;line-height:1.6;color:var(--ink-2);}
+  .mini{border:1px solid var(--line-dark);background:none;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;}
+  .mini:hover{border-color:var(--blue);color:var(--blue);}
+  .slip-side{border-left:1px dashed var(--line-dark);padding:19px 20px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;gap:14px;}
+  .update{font:12px/1.5 var(--mono);color:var(--muted);text-align:right;}
+  .update.stale{color:var(--red);}
+  .handoff{border:1px solid var(--blue);background:var(--blue);color:#fff;padding:8px 16px;font-size:14px;cursor:pointer;}
+  .handoff:hover{background:var(--blue-dark);border-color:var(--blue-dark);}
+  .offline-actions{display:flex;flex-direction:column;gap:8px;align-items:stretch;}
+  .offline-actions button{border:1px solid var(--line-dark);background:none;padding:6px 10px;font-size:12px;cursor:pointer;white-space:nowrap;}
+  .offline-actions button:hover{border-color:var(--ink);}
+  .foot{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-top:1px solid var(--line-dark);margin-top:20px;padding-top:16px;font:12px/1.7 var(--mono);color:var(--muted);}
+  dialog.handoff-dialog{width:min(660px,calc(100vw - 32px));margin:auto;border:1px solid var(--ink);background:var(--sheet);color:var(--ink);padding:0;max-height:88vh;overflow:auto;}
+  dialog.handoff-dialog::backdrop{background:rgba(20,23,26,.48);}
+  .dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:22px 26px 17px;border-bottom:2px solid var(--ink);}
+  .dialog-head h2{margin:0;font:700 27px/1.25 var(--head);}
+  .dialog-head small{display:block;margin-top:5px;font:12px/1.5 var(--mono);color:var(--muted);}
+  .close{border:0;background:none;font-size:22px;line-height:1;cursor:pointer;padding:2px 4px;color:var(--muted);}
+  .dialog-body{padding:20px 26px 24px;}
+  .phase{display:flex;border-bottom:1px solid var(--line);}
+  .phase button{flex:1;border:0;border-bottom:2px solid transparent;background:none;padding:11px 6px 13px;font-size:14px;color:var(--muted);cursor:pointer;text-align:left;}
+  .phase button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--blue);font-weight:600;}
+  .phase button span{display:block;margin-top:2px;font:12px/1.4 var(--mono);color:var(--muted);font-weight:400;}
+  .preview-label{display:block;margin:18px 0 7px;font-size:12px;color:var(--muted);}
+  textarea.preview{display:block;width:100%;height:174px;resize:vertical;border:1px solid var(--line-dark);background:#fbfaf2;padding:12px;font:12px/1.75 var(--mono);color:var(--ink-2);}
+  .dialog-foot{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:18px;flex-wrap:wrap;}
+  .dialog-foot p{margin:0;font-size:12px;line-height:1.7;color:var(--muted);max-width:330px;}
+  .dialog-actions{display:flex;gap:10px;}
+  .ghost{border:1px solid var(--line-dark);background:none;padding:10px 15px;font-size:14px;cursor:pointer;}
+  .ghost:hover{border-color:var(--ink);}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:var(--sheet);padding:10px 16px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s;z-index:20;}
+  .toast.on{opacity:1;}
+  @media (max-width:980px){
+    .head{grid-template-columns:190px minmax(0,1fr) auto;gap:24px;padding:24px 28px 18px;}
+    .head-title h1{font-size:32px;}
+    .board{padding:22px 28px 40px;}
+  }
+  @media (max-width:760px){
+    .head{display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;padding:20px 18px 16px;}
+    .brand{margin-right:auto;}
+    .head-title{order:2;width:100%;}
+    .head-title h1{font-size:28px;}
+    .head-title p{font-size:12px;}
+    .add{padding:8px 12px;font-size:12px;}
+    .tabs{padding:0 18px;gap:18px;overflow-x:auto;}
+    .tabs button{font-size:13px;padding:12px 0 10px;white-space:nowrap;}
+    .board{padding:18px 18px 32px;}
+    .slip{grid-template-columns:1fr;border-left-width:3px;}
+    .stamp{display:flex;align-items:center;gap:12px;padding:14px 16px 0;}
+    .stamp small{margin:0;}
+    .slip-body{padding:10px 16px 16px;}
+    .slip-title h2{font-size:22px;}
+    .next{font-size:16px;}
+    .path{font-size:12px;}
+    .slip-side{border-left:0;border-top:1px dashed var(--line-dark);padding:12px 16px;flex-direction:row;align-items:center;justify-content:space-between;}
+    .sub{grid-template-columns:1fr auto;gap:4px 12px;}
+    .sub-name{grid-column:1;}
+    .sub-next{grid-column:1 / -1;font-size:13px;}
+    .sub .mini{grid-column:2;grid-row:1;}
+    .offline-actions{flex-direction:row;}
+    .foot{font-size:12px;}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+</head>
+<body>
+<header class="head">
+  <div class="brand" aria-label="案屿">
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M2.5 23.5c4-2.5 6.8 2.5 11 0s6.9 2.5 16 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      <path d="M6 18.5l7.2-10.2L21 18.5H6Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+    </svg>
+    <span><span class="name">案屿</span><span class="latin">ISLE</span></span>
+  </div>
+  <div class="head-title">
+    <h1>项目交接单</h1>
+    <p><span>2026年10月23日 周五</span><span>6 个项目 / 8 个工作区</span><span>1 个待检查</span></p>
+  </div>
+  <button class="add" id="addBtn">添加项目</button>
+</header>
+
+<nav class="tabs" aria-label="按状态筛选">
+  <button data-filter="all" aria-pressed="true">全部 <span>6</span></button>
+  <button data-filter="active" aria-pressed="false">进行中 <span>4</span></button>
+  <button data-filter="paused" aria-pressed="false">暂停 <span>1</span></button>
+  <button data-filter="offline" aria-pressed="false">离线 <span>1</span></button>
+</nav>
+
+<main class="board">
+  <article class="slip" data-status="active" data-id="isle">
+    <div class="stamp"><span>进行中</span><small>10-23</small></div>
+    <div class="slip-body">
+      <div class="slip-title"><h2>案屿</h2><span class="count">4 项未完成 / 22 项已完成</span></div>
+      <p class="next">停在 v0.20 能力集；下一步按用户安排做真实交接或性能复测</p>
+      <p class="path">C:\Users\32485\Desktop\_项目\案屿</p>
+    </div>
+    <div class="slip-side">
+      <span class="update">今天 23:41</span>
+      <button class="handoff" data-handoff="isle">交接</button>
+    </div>
+  </article>
+
+  <article class="slip" data-status="active" data-id="prism">
+    <div class="stamp"><span>进行中</span><small>10-23</small></div>
+    <div class="slip-body">
+      <div class="slip-title"><h2>棱镜 Prism</h2><span class="count">3 项未完成 / 42 项已完成</span></div>
+      <p class="next">材质处理已调整，界面未验证；下一步补边界样例并重跑视觉回归</p>
+      <p class="path">D:\work\prism</p>
+    </div>
+    <div class="slip-side">
+      <span class="update">今天 18:02</span>
+      <button class="handoff" data-handoff="prism">交接</button>
+    </div>
+  </article>
+
+  <article class="slip" data-status="active" data-id="muse">
+    <div class="stamp"><span>进行中</span><small>10-23</small></div>
+    <div class="slip-body">
+      <div class="slip-title"><h2>缪斯 Muse</h2><span class="count">3 个工作区 / 3 项未完成</span></div>
+      <p class="next">主工作区：先把素材索引合并回 main，再开新的方向</p>
+      <div class="subs">
+        <div class="sub"><span class="sub-name">视觉方向</span><span class="sub-next">球体材质定稿；下一步导出三档性能对照图</span><button class="mini" data-handoff="orbit">交接</button></div>
+        <div class="sub"><span class="sub-name">数据方向</span><span class="sub-next">账本结构已定；下一步补导入脚本的错误分支</span><button class="mini" data-handoff="ledger">交接</button></div>
+      </div>
+    </div>
+    <div class="slip-side">
+      <span class="update">今天 17:20</span>
+      <button class="handoff" data-handoff="muse">交接</button>
+    </div>
+  </article>
+
+  <article class="slip" data-status="active" data-id="story">
+    <div class="stamp"><span>进行中</span><small>10-11</small></div>
+    <div class="slip-body">
+      <div class="slip-title"><h2>叙事工坊</h2><span class="count">1 项未完成</span><span class="flag">待检查</span></div>
+      <p class="next">第一章结构已确认；下一步整理人物关系和冲突线</p>
+      <p class="path">D:\work\story</p>
+    </div>
+    <div class="slip-side">
+      <span class="update stale">12 天未更新</span>
+      <button class="handoff" data-handoff="story">交接</button>
+    </div>
+  </article>
+
+  <article class="slip paused" data-status="paused" data-id="archive">
+    <div class="stamp"><span>暂停</span><small>10-02</small></div>
+    <div class="slip-body">
+      <div class="slip-title"><h2>山海资料库 · 地方影像与口述记录整理</h2><span class="count">2 项未完成</span></div>
+      <p class="next">材料已提交；等待补充授权文件后再继续整理</p>
+      <p class="path">D:\work\archive</p>
+    </div>
+    <div class="slip-side">
+      <span class="update">21 天前</span>
+      <button class="handoff" data-handoff="archive">交接</button>
+    </div>
+  </article>
+
+  <article class="slip offline" data-status="offline" data-id="offline">
+    <div class="stamp"><span>离线</span><small>—</small></div>
+    <div class="slip-body">
+      <div class="slip-title"><h2>迁走的项目</h2><span class="count">记录不可读</span></div>
+      <p class="next">目录不存在或无法读取，请检查路径。条目仍保留在清单中。</p>
+      <p class="path">D:\work\moved-away</p>
+    </div>
+    <div class="slip-side">
+      <span class="update">离线</span>
+      <div class="offline-actions"><button data-note="重新指向">重新指向</button><button data-note="移出看板">移出看板</button></div>
+    </div>
+  </article>
+
+  <footer class="foot"><span>记录来自各项目的 TASKS.md / 本机运行 / 交接由你确认</span><span>方向 B · 交接单</span></footer>
+</main>
+
+<dialog class="handoff-dialog" id="handoffDialog" aria-labelledby="handoffTitle">
+  <div class="dialog-head">
+    <div><h2 id="handoffTitle">交接 · 案屿</h2><small id="handoffMeta">署名未指定 / 今天 23:41</small></div>
+    <button class="close" id="closeDialog" aria-label="关闭">×</button>
+  </div>
+  <div class="dialog-body">
+    <div class="phase" role="group" aria-label="交接阶段">
+      <button data-mode="close" aria-pressed="false">1 收工回写<span>发给当前 Agent，整理结果并回写 TASKS.md</span></button>
+      <button data-mode="start" aria-pressed="true">2 开工交接<span>带上最新记录，交给下一位 Agent</span></button>
+    </div>
+    <label class="preview-label" for="prompt">将要发送的文字</label>
+    <textarea class="preview" id="prompt" readonly></textarea>
+    <div class="dialog-foot">
+      <p>案屿只生成文字，不执行命令，也不上传记录。收工后再刷新一次记录。</p>
+      <div class="dialog-actions"><button class="ghost" id="cancel">取消</button><button class="add" id="copy">复制文字</button></div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const records = {
+  isle: {name:'案屿', path:'C:\\Users\\32485\\Desktop\\_项目\\案屿', next:'停在 v0.20 能力集；下一步按用户安排做真实交接或性能复测', updated:'今天 23:41'},
+  prism: {name:'棱镜 Prism', path:'D:\\work\\prism', next:'材质处理已调整，界面未验证；下一步补边界样例并重跑视觉回归', updated:'今天 18:02'},
+  muse: {name:'缪斯 Muse', path:'D:\\work\\muse', next:'主工作区：先把素材索引合并回 main，再开新的方向', updated:'今天 17:20'},
+  orbit: {name:'缪斯 · 视觉方向', path:'D:\\work\\muse-orbit', next:'球体材质定稿；下一步导出三档性能对照图', updated:'今天 16:40'},
+  ledger: {name:'缪斯 · 数据方向', path:'D:\\work\\muse-ledger', next:'账本结构已定；下一步补导入脚本的错误分支', updated:'昨天 22:10'},
+  story: {name:'叙事工坊', path:'D:\\work\\story', next:'第一章结构已确认；下一步整理人物关系和冲突线', updated:'12 天前'},
+  archive: {name:'山海资料库 · 地方影像与口述记录整理', path:'D:\\work\\archive', next:'材料已提交；等待补充授权文件后再继续整理', updated:'21 天前'}
+};
+let current = 'isle';
+let mode = 'start';
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+let toastTimer;
+function toast(message){
+  const el = $('#toast');
+  el.textContent = message;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2200);
+}
+
+function promptText(which){
+  const p = records[current];
+  if (which === 'close') {
+    return '使用案屿 Skill 执行收工回写，署名未指定，请先向我确认。\n' +
+      '项目：' + p.name + '\n' +
+      '路径：' + p.path + '\n' +
+      '本次记录：' + p.next + '\n' +
+      '请更新 TASKS.md 的 next、交接摘要与工作留痕，然后告知我结果。';
+  }
+  return '使用案屿 Skill 读取项目记录后接着做，先确认你看到的下一步。\n' +
+    '项目：' + p.name + '\n' +
+    '路径：' + p.path + '\n' +
+    '下一步：' + p.next + '\n' +
+    '如记录不明确，先向我确认再开始。';
+}
+
+function updatePreview(){
+  $('#prompt').value = promptText(mode);
+  $$('.phase button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false'));
+}
+
+function openHandoff(id){
+  const p = records[id];
+  if (!p) return;
+  current = id;
+  $('#handoffTitle').textContent = '交接 · ' + p.name;
+  $('#handoffMeta').textContent = '署名未指定 / ' + p.updated;
+  mode = 'start';
+  updatePreview();
+  $('#handoffDialog').showModal();
+}
+
+$$('[data-handoff]').forEach(button => button.addEventListener('click', () => openHandoff(button.dataset.handoff)));
+$$('[data-note]').forEach(button => button.addEventListener('click', () => toast('方向小样：' + button.dataset.note + '流程未接入。')));
+$('#addBtn').addEventListener('click', () => toast('方向小样：添加项目流程未接入。'));
+$('#closeDialog').addEventListener('click', () => $('#handoffDialog').close());
+$('#cancel').addEventListener('click', () => $('#handoffDialog').close());
+$('#handoffDialog').addEventListener('click', event => { if (event.target === $('#handoffDialog')) $('#handoffDialog').close(); });
+$$('.phase button').forEach(button => button.addEventListener('click', () => { mode = button.dataset.mode; updatePreview(); }));
+$('#copy').addEventListener('click', async () => {
+  const text = $('#prompt').value;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('已复制。');
+  } catch {
+    $('#prompt').focus();
+    $('#prompt').select();
+    toast('已选中文字，请手动复制。');
+  }
+});
+
+$$('.tabs button').forEach(button => button.addEventListener('click', () => {
+  const filter = button.dataset.filter;
+  $$('.tabs button').forEach(b => b.setAttribute('aria-pressed', b === button ? 'true' : 'false'));
+  $$('.slip').forEach(slip => { slip.hidden = filter !== 'all' && slip.dataset.status !== filter; });
+}));
+</script>
+</body>
+</html>

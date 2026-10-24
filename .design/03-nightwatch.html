@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案屿 · 方向 C · 夜航</title>
+<style>
+  :root{
+    --bg:#0b1416;
+    --panel:#0f1d20;
+    --ink:#ece7d8;
+    --ink-2:#d2cbbb;
+    --muted:#93a49c;
+    --line:#26383b;
+    --amber:#e2a65a;
+    --green:#86b9a2;
+    --red:#d87264;
+    --display:"Bahnschrift","Microsoft YaHei UI","PingFang SC",sans-serif;
+    --sans:"Microsoft YaHei UI","PingFang SC","Noto Sans CJK SC",sans-serif;
+    --mono:"Cascadia Mono","Consolas","SFMono-Regular",monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;}
+  body{background:var(--bg);color:var(--ink);font:15px/1.65 var(--sans);-webkit-font-smoothing:antialiased;}
+  button{font:inherit;color:inherit;}
+  button:focus-visible,a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--amber);outline-offset:3px;}
+  .top{height:64px;display:flex;align-items:center;gap:24px;padding:0 28px;border-bottom:1px solid var(--line);}
+  .brand{display:flex;align-items:center;gap:11px;flex:none;}
+  .brand svg{width:28px;height:28px;flex:none;color:var(--amber);}
+  .brand .name{display:block;font:600 22px/1 var(--display);letter-spacing:.03em;}
+  .brand .latin{display:block;margin-top:3px;font:12px/1 var(--mono);letter-spacing:.18em;color:var(--muted);}
+  .top-date{font:12px/1 var(--mono);color:var(--muted);}
+  .top-count{margin-left:auto;font:13px/1 var(--mono);color:var(--ink-2);padding-left:24px;border-left:1px solid var(--line);white-space:nowrap;}
+  .add{border:1px solid var(--line);background:none;color:var(--ink);padding:8px 14px;font-size:13px;cursor:pointer;white-space:nowrap;}
+  .add:hover{border-color:var(--ink-2);}
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 430px;height:calc(100vh - 64px);}
+  .list{overflow:auto;padding:32px 36px 60px;min-width:0;}
+  .list-head{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--line);}
+  .list-head h1{margin:0;font:600 46px/1.1 var(--display);letter-spacing:.01em;}
+  .list-head .check{font:12px/1.4 var(--mono);color:var(--red);white-space:nowrap;}
+  .rows{margin-top:2px;}
+  .row{display:grid;grid-template-columns:3px 164px minmax(0,1fr) 94px;gap:18px;align-items:center;width:100%;padding:18px 4px 18px 0;border:0;border-bottom:1px solid var(--line);background:none;text-align:left;color:var(--ink);cursor:pointer;position:relative;}
+  .row:hover{background:rgba(236,231,216,.035);}
+  .row .bar{display:block;align-self:stretch;background:transparent;}
+  .bar.active{background:var(--green);}
+  .bar.paused{background:var(--amber);}
+  .bar.offline{background:#687872;}
+  .row .rname{font:600 22px/1.3 var(--display);overflow-wrap:anywhere;}
+  .row .rnext{font-size:14px;line-height:1.6;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .row .rmeta{font:12px/1.5 var(--mono);color:var(--muted);text-align:right;white-space:nowrap;}
+  .row .rmeta.stale{color:var(--red);}
+  .row[aria-current="true"]{background:rgba(134,185,162,.08);}
+  .row[aria-current="true"] .rname{color:var(--green);}
+  .row.child{padding-left:22px;}
+  .row.child::before{content:'';position:absolute;left:7px;top:0;bottom:0;border-left:1px solid var(--line);}
+  .row.child .rname{font-size:16px;font-weight:500;}
+  .row.child .rnext{font-size:13px;}
+  .now{overflow:auto;padding:30px 32px 40px;border-left:1px solid var(--line);background:var(--panel);}
+  .now-head{display:flex;align-items:center;justify-content:space-between;gap:16px;font:12px/1.4 var(--sans);color:var(--muted);}
+  .now-head .status{color:var(--green);font-weight:600;}
+  .now-head .status.paused{color:var(--amber);}
+  .now-head .status.offline{color:var(--muted);}
+  .now h2{margin:24px 0 5px;font:600 36px/1.2 var(--display);letter-spacing:.01em;overflow-wrap:anywhere;}
+  .now-path{margin:0;font:12px/1.6 var(--mono);color:var(--muted);overflow-wrap:anywhere;}
+  .now-next{margin-top:34px;padding-top:20px;border-top:1px solid var(--line);}
+  .label{display:block;font-size:12px;font-weight:600;color:var(--amber);}
+  .now-next p{margin:10px 0 0;font:600 30px/1.45 var(--display);letter-spacing:.01em;text-wrap:pretty;}
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:30px 0 0;padding:20px 0 0;border-top:1px solid var(--line);}
+  .stats div{min-width:0;}
+  .stats dt{font-size:12px;color:var(--muted);}
+  .stats dd{margin:5px 0 0;font:500 27px/1.1 var(--mono);color:var(--ink);}
+  .actions{display:flex;gap:10px;margin-top:28px;flex-wrap:wrap;}
+  .solid{border:1px solid var(--amber);background:var(--amber);color:#171208;padding:12px 18px;font:600 14px/1.2 var(--sans);cursor:pointer;}
+  .solid:hover{background:#f0b66b;border-color:#f0b66b;}
+  .solid:disabled{opacity:.36;cursor:not-allowed;}
+  .ghost{border:1px solid var(--line);background:none;color:var(--ink);padding:11px 15px;font-size:14px;cursor:pointer;}
+  .ghost:hover{border-color:var(--ink-2);}
+  .tasks{margin-top:38px;padding-top:20px;border-top:1px solid var(--line);}
+  .tasks h3{margin:0 0 8px;font-size:13px;font-weight:600;color:var(--muted);}
+  .tasks ul{list-style:none;margin:0;padding:0;}
+  .tasks li{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--line);font-size:14px;line-height:1.6;color:var(--ink-2);}
+  .tasks li:last-child{border-bottom:0;}
+  .tdot{width:6px;height:6px;border-radius:50%;background:var(--green);flex:none;margin-top:8px;}
+  .tdot.pending{background:#687872;}
+  .now-foot{margin-top:30px;font-size:12px;line-height:1.8;color:var(--muted);}
+  dialog.handoff{width:min(660px,calc(100vw - 32px));margin:auto;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:0;max-height:88vh;overflow:auto;}
+  dialog.handoff::backdrop{background:rgba(3,8,9,.7);}
+  .dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:24px 26px 18px;border-bottom:1px solid var(--line);}
+  .dialog-head h2{margin:0;font:600 27px/1.25 var(--display);}
+  .dialog-head small{display:block;margin-top:5px;font:12px/1.5 var(--mono);color:var(--muted);}
+  .close{border:0;background:none;font-size:22px;line-height:1;cursor:pointer;padding:2px 4px;color:var(--muted);}
+  .dialog-body{padding:20px 26px 24px;}
+  .phase{display:flex;border-bottom:1px solid var(--line);}
+  .phase button{flex:1;border:0;border-bottom:2px solid transparent;background:none;padding:11px 6px 13px;font-size:14px;color:var(--muted);cursor:pointer;text-align:left;}
+  .phase button[aria-pressed="true"]{color:var(--ink);border-bottom-color:var(--amber);font-weight:600;}
+  .phase button span{display:block;margin-top:2px;font:12px/1.4 var(--mono);color:var(--muted);font-weight:400;}
+  .preview-label{display:block;margin:18px 0 7px;font-size:12px;color:var(--muted);}
+  textarea.preview{display:block;width:100%;height:174px;resize:vertical;border:1px solid var(--line);background:#0a1214;padding:12px;font:12px/1.75 var(--mono);color:var(--ink-2);}
+  .dialog-foot{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-top:18px;flex-wrap:wrap;}
+  .dialog-foot p{margin:0;font-size:12px;line-height:1.7;color:var(--muted);max-width:340px;}
+  .dialog-actions{display:flex;gap:10px;}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .18s;z-index:20;}
+  .toast.on{opacity:1;}
+  @media (max-width:1120px){
+    .layout{grid-template-columns:minmax(0,1fr) 380px;}
+    .list{padding:28px 28px 52px;}
+    .now{padding:26px 26px 34px;}
+    .row{grid-template-columns:3px 140px minmax(0,1fr) 86px;}
+    .now-next p{font-size:27px;}
+  }
+  @media (max-width:860px){
+    html,body{height:auto;}
+    body{overflow:auto;}
+    .top{height:auto;padding:15px 18px;flex-wrap:wrap;gap:10px 16px;}
+    .top-date{display:none;}
+    .top-count{margin-left:auto;border-left:0;padding-left:0;font-size:12px;}
+    .layout{display:flex;flex-direction:column;height:auto;}
+    .now{order:-1;border-left:0;border-bottom:1px solid var(--line);padding:24px 20px 28px;overflow:visible;}
+    .now h2{font-size:30px;margin-top:16px;}
+    .now-next p{font-size:25px;line-height:1.5;}
+    .list{padding:24px 20px 40px;overflow:visible;}
+    .list-head h1{font-size:34px;}
+    .row{grid-template-columns:3px minmax(0,1fr) 82px;gap:10px 12px;padding:14px 0;}
+    .row .rname{font-size:19px;}
+    .row .rnext{grid-column:2 / -1;font-size:13px;}
+    .row .rmeta{grid-column:3;grid-row:1;font-size:12px;}
+    .row.child{padding-left:16px;}
+    .row.child::before{left:3px;}
+    .row.child .rname{font-size:15px;}
+    .stats{margin-top:24px;}
+    .stats dd{font-size:24px;}
+    .now-foot{font-size:12px;}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand" aria-label="案屿">
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M2.5 23.5c4-2.5 6.8 2.5 11 0s6.9 2.5 16 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M6 18.5l7.2-10.2L21 18.5H6Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+    </svg>
+    <span><span class="name">案屿</span><span class="latin">ISLE</span></span>
+  </div>
+  <span class="top-date">2026.10.23 周五 / 本机</span>
+  <span class="top-count">6 个项目 / 8 个工作区</span>
+  <button class="add" id="addBtn">添加项目</button>
+</header>
+
+<div class="layout">
+  <section class="list">
+    <div class="list-head"><h1>项目</h1><span class="check">1 个待检查</span></div>
+    <div class="rows" id="rows">
+      <button class="row" data-id="isle" aria-current="true"><span class="bar active"></span><span class="rname">案屿</span><span class="rnext">停在 v0.20 能力集；下一步按用户安排做真实交接或性能复测</span><span class="rmeta">今天 23:41</span></button>
+      <button class="row" data-id="prism"><span class="bar active"></span><span class="rname">棱镜 Prism</span><span class="rnext">材质处理已调整，界面未验证；下一步补边界样例并重跑视觉回归</span><span class="rmeta">今天 18:02</span></button>
+      <button class="row" data-id="muse"><span class="bar active"></span><span class="rname">缪斯 Muse</span><span class="rnext">主工作区：先把素材索引合并回 main，再开新的方向</span><span class="rmeta">今天 17:20</span></button>
+      <button class="row child" data-id="orbit"><span class="bar active"></span><span class="rname">视觉方向</span><span class="rnext">球体材质定稿；下一步导出三档性能对照图</span><span class="rmeta">今天 16:40</span></button>
+      <button class="row child" data-id="ledger"><span class="bar active"></span><span class="rname">数据方向</span><span class="rnext">账本结构已定；下一步补导入脚本的错误分支</span><span class="rmeta">昨天 22:10</span></button>
+      <button class="row" data-id="story"><span class="bar active"></span><span class="rname">叙事工坊</span><span class="rnext">第一章结构已确认；下一步整理人物关系和冲突线</span><span class="rmeta stale">12 天前</span></button>
+      <button class="row paused" data-id="archive"><span class="bar paused"></span><span class="rname">山海资料库</span><span class="rnext">材料已提交；等待补充授权文件后再继续整理</span><span class="rmeta">21 天前</span></button>
+      <button class="row offline" data-id="offline"><span class="bar offline"></span><span class="rname">迁走的项目</span><span class="rnext">目录不存在或无法读取，请检查路径。</span><span class="rmeta">离线</span></button>
+    </div>
+  </section>
+
+  <aside class="now" aria-live="polite">
+    <div class="now-head"><span>当前项目</span><span class="status" id="nowStatus">进行中</span></div>
+    <h2 id="nowName">案屿</h2>
+    <p class="now-path" id="nowPath">C:\Users\32485\Desktop\_项目\案屿</p>
+    <div class="now-next">
+      <span class="label">下一步</span>
+      <p id="nowNext">停在 v0.20 能力集；下一步按用户安排做真实交接或性能复测</p>
+    </div>
+    <dl class="stats">
+      <div><dt>未完成</dt><dd id="nowOpen">4</dd></div>
+      <div><dt>已完成</dt><dd id="nowDone">22</dd></div>
+      <div><dt>工作区</dt><dd id="nowWs">1</dd></div>
+    </dl>
+    <div class="actions">
+      <button class="solid" id="handoffBtn">交接</button>
+      <button class="ghost" id="retryBtn" hidden>重新指向</button>
+    </div>
+    <div class="tasks" id="tasksWrap">
+      <h3>正在做</h3>
+      <ul id="nowTasks"></ul>
+    </div>
+    <p class="now-foot">记录来自 TASKS.md / 本机运行 / 交接文字只由你复制发出。</p>
+  </aside>
+</div>
+
+<dialog class="handoff" id="handoffDialog" aria-labelledby="handoffTitle">
+  <div class="dialog-head">
+    <div><h2 id="handoffTitle">交接 · 案屿</h2><small id="handoffMeta">署名未指定 / 今天 23:41</small></div>
+    <button class="close" id="closeDialog" aria-label="关闭">×</button>
+  </div>
+  <div class="dialog-body">
+    <div class="phase" role="group" aria-label="交接阶段">
+      <button data-mode="close" aria-pressed="false">1 收工回写<span>发给当前 Agent，整理结果并回写 TASKS.md</span></button>
+      <button data-mode="start" aria-pressed="true">2 开工交接<span>带上最新记录，交给下一位 Agent</span></button>
+    </div>
+    <label class="preview-label" for="prompt">将要发送的文字</label>
+    <textarea class="preview" id="prompt" readonly></textarea>
+    <div class="dialog-foot">
+      <p>案屿只生成文字，不执行命令，也不上传记录。收工后再刷新一次记录。</p>
+      <div class="dialog-actions"><button class="ghost" id="cancel">取消</button><button class="solid" id="copy">复制文字</button></div>
+    </div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const projects = {
+  isle: {name:'案屿', state:'ok', status:'进行中', next:'停在 v0.20 能力集；下一步按用户安排做真实交接或性能复测', open:4, done:22, ws:1, updated:'今天 23:41', path:'C:\\Users\\32485\\Desktop\\_项目\\案屿', tasks:[['在真实浏览器验收 git 历史分区与复制命令按钮','active'],['完成一次真实跨 Agent 交接','pending']]},
+  prism: {name:'棱镜 Prism', state:'ok', status:'进行中', next:'材质处理已调整，界面未验证；下一步补边界样例并重跑视觉回归', open:3, done:42, ws:1, updated:'今天 18:02', path:'D:\\work\\prism', tasks:[['材质处理边界样例','active'],['移动端透明材质验证','pending']]},
+  muse: {name:'缪斯 Muse', state:'ok', status:'进行中', next:'主工作区：先把素材索引合并回 main，再开新的方向', open:3, done:12, ws:3, updated:'今天 17:20', path:'D:\\work\\muse', tasks:[['合并素材索引到 main','active']]},
+  orbit: {name:'缪斯 · 视觉方向', state:'ok', status:'进行中', next:'球体材质定稿；下一步导出三档性能对照图', open:2, done:5, ws:1, updated:'今天 16:40', path:'D:\\work\\muse-orbit', tasks:[['导出三档性能对照图','active']]},
+  ledger: {name:'缪斯 · 数据方向', state:'ok', status:'进行中', next:'账本结构已定；下一步补导入脚本的错误分支', open:1, done:9, ws:1, updated:'昨天 22:10', path:'D:\\work\\muse-ledger', tasks:[['补导入脚本错误分支','active']]},
+  story: {name:'叙事工坊', state:'ok', status:'进行中', next:'第一章结构已确认；下一步整理人物关系和冲突线', open:1, done:0, ws:1, updated:'12 天前', path:'D:\\work\\story', stale:true, tasks:[['梳理第二幕的动机与转折','active']]},
+  archive: {name:'山海资料库 · 地方影像与口述记录整理', state:'paused', status:'暂停', next:'材料已提交；等待补充授权文件后再继续整理', open:2, done:8, ws:1, updated:'21 天前', path:'D:\\work\\archive', tasks:[['补齐两份授权文件','pending']]},
+  offline: {name:'迁走的项目', state:'offline', status:'离线', next:'目录不存在或无法读取，请检查路径。', open:0, done:0, ws:0, updated:'离线', path:'D:\\work\\moved-away', tasks:[]}
+};
+let current = 'isle';
+let mode = 'start';
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+
+let toastTimer;
+function toast(message){
+  const el = $('#toast');
+  el.textContent = message;
+  el.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('on'), 2200);
+}
+
+function syncCurrent(){
+  $$('.row').forEach(row => row.setAttribute('aria-current', row.dataset.id === current ? 'true' : 'false'));
+}
+
+function render(){
+  const p = projects[current];
+  const offline = p.state === 'offline';
+  $('#nowStatus').textContent = p.status;
+  $('#nowStatus').className = 'status' + (p.state === 'paused' ? ' paused' : offline ? ' offline' : '');
+  $('#nowName').textContent = p.name;
+  $('#nowPath').textContent = p.path;
+  $('#nowPath').hidden = offline;
+  $('#nowNext').textContent = offline ? '目录不存在或无法读取，请检查路径。' : p.next;
+  $('#nowOpen').textContent = offline ? '—' : String(p.open);
+  $('#nowDone').textContent = offline ? '—' : String(p.done);
+  $('#nowWs').textContent = offline ? '—' : String(p.ws);
+  $('#handoffBtn').disabled = offline;
+  $('#handoffBtn').textContent = offline ? '不可交接' : '交接';
+  $('#retryBtn').hidden = !offline;
+  $('#handoffMeta').textContent = '署名未指定 / ' + p.updated;
+  $('#handoffTitle').textContent = '交接 · ' + p.name;
+  $('#tasksWrap').hidden = offline || !p.tasks.length;
+  $('#nowTasks').innerHTML = p.tasks.map(task => '<li><span class="tdot ' + (task[1] === 'active' ? '' : 'pending') + '"></span><span>' + task[0] + '</span></li>').join('');
+  syncCurrent();
+}
+
+function promptText(which){
+  const p = projects[current];
+  if (which === 'close') {
+    return '使用案屿 Skill 执行收工回写，署名未指定，请先向我确认。\n' +
+      '项目：' + p.name + '\n' +
+      '路径：' + p.path + '\n' +
+      '本次记录：' + p.next + '\n' +
+      '请更新 TASKS.md 的 next、交接摘要与工作留痕，然后告知我结果。';
+  }
+  return '使用案屿 Skill 读取项目记录后接着做，先确认你看到的下一步。\n' +
+    '项目：' + p.name + '\n' +
+    '路径：' + p.path + '\n' +
+    '下一步：' + p.next + '\n' +
+    '如记录不明确，先向我确认再开始。';
+}
+
+function updatePreview(){
+  $('#prompt').value = promptText(mode);
+  $$('.phase button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === mode ? 'true' : 'false'));
+}
+
+function openHandoff(){
+  if (projects[current].state === 'offline') return;
+  mode = 'start';
+  updatePreview();
+  $('#handoffDialog').showModal();
+}
+
+$('#rows').addEventListener('click', event => {
+  const row = event.target.closest('[data-id]');
+  if (!row) return;
+  current = row.dataset.id;
+  render();
+});
+$('#handoffBtn').addEventListener('click', openHandoff);
+$('#retryBtn').addEventListener('click', () => toast('方向小样：重新指向流程未接入。'));
+$('#addBtn').addEventListener('click', () => toast('方向小样：添加项目流程未接入。'));
+$$('.phase button').forEach(button => button.addEventListener('click', () => { mode = button.dataset.mode; updatePreview(); }));
+$('#closeDialog').addEventListener('click', () => $('#handoffDialog').close());
+$('#cancel').addEventListener('click', () => $('#handoffDialog').close());
+$('#handoffDialog').addEventListener('click', event => { if (event.target === $('#handoffDialog')) $('#handoffDialog').close(); });
+$('#copy').addEventListener('click', async () => {
+  const text = $('#prompt').value;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('已复制。');
+  } catch {
+    $('#prompt').focus();
+    $('#prompt').select();
+    toast('已选中文字，请手动复制。');
+  }
+});
+
+render();
+</script>
+</body>
+</html>
