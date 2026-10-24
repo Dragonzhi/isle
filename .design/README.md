@@ -23,6 +23,8 @@
 
 **2026-10-24 工具栏、卡片视图与折叠：** 「只看久未更新」移入 `···` 菜单；右侧新增列表/卡片图标切换（localStorage `isle.project-view`）；详情摘要/留痕/Git 默认收起，用 chevron 图标展开。截图见 `screenshots/production-view-cards-1440.png`、`production-more-menu-1440.png`、`production-collapsed-1440.png`。
 
+**2026-10-24 主按钮立体感：** 墨色主按钮补顶部棱边、3px 硬边、软投影与按下内阴影；截图见 `screenshots/production-header-actions-1440.png`、`production-primary-actions-1440.png`。
+
 打开 `index.html` 看选择页，或直接打开下面三个单文件。每个文件都可以切换项目、打开“交接”弹窗；其余未接入的流程只给诚实提示。
 
 ## 三个方向

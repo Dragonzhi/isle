@@ -1582,8 +1582,14 @@
 
 /* ── 纸键：硬边、上浮、按下 ── */
 .primary, .primaryButton, .handoffButton {
-  background-image: linear-gradient(180deg, #2a3530, #1d2522);
-  box-shadow: 0 2px 0 #0d1411, inset 0 1px 0 rgba(255, 255, 255, .10);
+  background-image: linear-gradient(180deg, #3b4a41 0%, #25312b 48%, #161f1b 100%);
+  border-color: #0b110e;
+  border-top-color: #46554c;
+  box-shadow:
+    0 3px 0 #0a0f0c,
+    0 6px 12px rgba(16, 23, 20, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -1px 0 rgba(0, 0, 0, .45);
 }
 .secondary, .quietButton, .smallButton, .miniButton, .transferTabs > button {
   background-image: linear-gradient(180deg, #fdfcf8, #f3f2ec);
@@ -1593,7 +1599,16 @@
   background-image: linear-gradient(180deg, #fdf8f5, #f7ece6);
   box-shadow: 0 3px 0 #d8b9ad, inset 0 1px 0 #fff;
 }
-.dangerButton { background-image: linear-gradient(180deg, #b45236, #a94a2f); box-shadow: 0 2px 0 #6d2f1e, inset 0 1px 0 rgba(255, 255, 255, .10); }
+.dangerButton {
+  background-image: linear-gradient(180deg, #c15c3f, #a94a2f 55%, #8f3b24);
+  border-color: #5b2618;
+  border-top-color: #d0785e;
+  box-shadow:
+    0 3px 0 #5b2618,
+    0 6px 12px rgba(169, 74, 47, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .20),
+    inset 0 -1px 0 rgba(0, 0, 0, .35);
+}
 .iconButtonBordered { box-shadow: 0 1px 0 var(--line); }
 .primary:disabled, .primaryButton:disabled, .handoffButton:disabled,
 .secondary:disabled, .quietButton:disabled, .smallButton:disabled, .miniButton:disabled,
@@ -1607,7 +1622,11 @@
 }
 .primary:active:not(:disabled), .primaryButton:active:not(:disabled), .handoffButton:active:not(:disabled) {
   transform: translateY(1px);
-  box-shadow: 0 0 0 #0d1411;
+  box-shadow:
+    0 1px 0 #0a0f0c,
+    0 2px 4px rgba(16, 23, 20, .18),
+    inset 0 2px 5px rgba(0, 0, 0, .45),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
 }
 .secondary:active:not(:disabled), .quietButton:active:not(:disabled), .smallButton:active:not(:disabled),
 .miniButton:active:not(:disabled), .transferTabs > button:active:not(:disabled) {
@@ -1615,13 +1634,26 @@
   box-shadow: 0 0 0 var(--line-dark);
 }
 .quietDanger:active:not(:disabled) { box-shadow: 0 0 0 #d8b9ad; }
-.dangerButton:active:not(:disabled) { box-shadow: 0 0 0 #6d2f1e; }
+.dangerButton:active:not(:disabled) {
+  box-shadow:
+    0 1px 0 #5b2618,
+    0 2px 4px rgba(169, 74, 47, .18),
+    inset 0 2px 5px rgba(0, 0, 0, .38),
+    inset 0 1px 0 rgba(255, 255, 255, .08);
+}
 .iconButtonBordered:active:not(:disabled) { transform: translateY(1px); box-shadow: 0 0 0 var(--line); }
 
 @media (hover: hover) {
   .primary:hover:not(:disabled), .primaryButton:hover:not(:disabled), .handoffButton:hover:not(:disabled) {
+    background-image: linear-gradient(180deg, #45544b 0%, #2b3831 48%, #1a241f 100%);
+    border-color: #0b110e;
+    border-top-color: #53645a;
     transform: translateY(-1px);
-    box-shadow: 0 3px 0 #0d1411, 0 7px 15px rgba(29, 37, 34, .14);
+    box-shadow:
+      0 4px 0 #0a0f0c,
+      0 10px 20px rgba(16, 23, 20, .28),
+      inset 0 1px 0 rgba(255, 255, 255, .24),
+      inset 0 -1px 0 rgba(0, 0, 0, .45);
   }
   .secondary:hover:not(:disabled), .quietButton:hover:not(:disabled), .smallButton:hover:not(:disabled),
   .miniButton:hover:not(:disabled), .transferTabs > button:hover:not(:disabled) {
@@ -1629,7 +1661,16 @@
     box-shadow: 0 4px 0 var(--line-dark), 0 6px 13px rgba(29, 37, 34, .08);
   }
   .quietDanger:hover:not(:disabled) { box-shadow: 0 4px 0 #d8b9ad, 0 6px 13px rgba(169, 74, 47, .10); }
-  .dangerButton:hover:not(:disabled) { box-shadow: 0 3px 0 #6d2f1e, 0 7px 15px rgba(169, 74, 47, .16); }
+  .dangerButton:hover:not(:disabled) {
+    background-image: linear-gradient(180deg, #c96648, #ae4d31 55%, #933d26);
+    border-color: #5b2618;
+    border-top-color: #d9856c;
+    box-shadow:
+      0 4px 0 #5b2618,
+      0 10px 20px rgba(169, 74, 47, .28),
+      inset 0 1px 0 rgba(255, 255, 255, .22),
+      inset 0 -1px 0 rgba(0, 0, 0, .35);
+  }
   .iconButtonBordered:hover:not(:disabled) { transform: translateY(-1px); }
   .iconButtonBordered:hover:not(:disabled) svg { transform: rotate(180deg); }
   .iconButtonBordered svg { transition: transform var(--motion-slow) var(--ease-out); }

@@ -218,6 +218,7 @@
 - 卡片视图复用交接单数据与动作：桌面两列，`<=1100px` 单列，移动端单列；状态章横排、下一步、子工作区、底部交接动作完整保留。
 - 详情页「交接摘要 / 工作留痕 / Git 历史」默认收起；标题右侧用 chevron 图标展开/收起，操作按钮在收起时隐藏。
 - 摘要手动编辑时禁用收起；展开内容带短淡入；留痕提示在收起时仍可见。
+- 主按钮加强立体感：顶部浅色棱边、深色 3px 硬边、软投影和按下内阴影；危险按钮同步。
 - 全部新按钮都有 `aria-label` / `title`；菜单和分区使用 `aria-expanded` / `aria-controls` / `aria-checked`；动效在 reduced-motion 下关闭。
 
 验证：
@@ -227,4 +228,4 @@
 - 菜单宽度 220px；过滤后 6 → 1 条，标签计数同步；Escape 关闭后焦点回到触发按钮；红点出现/消失；
 - 详情三区默认无内容且 `aria-expanded=false`；展开后摘要操作出现、留痕 10 条、Git 36 条；
 - 无控制台错误；可点目标无小于 24px。
-- 截图：`screenshots/production-toolbar-1440.png`、`production-view-cards-1440.png`、`production-view-cards-1024.png`、`production-view-cards-390.png`、`production-view-cards-320.png`、`production-more-menu-1440.png`、`production-filter-stale-1440.png`、`production-collapsed-1440.png`、`production-detail-expanded-1440.png`。
+- 截图：`screenshots/production-toolbar-1440.png`、`production-header-actions-1440.png`、`production-primary-actions-1440.png`、`production-view-cards-1440.png`、`production-view-cards-1024.png`、`production-view-cards-390.png`、`production-view-cards-320.png`、`production-more-menu-1440.png`、`production-filter-stale-1440.png`、`production-collapsed-1440.png`、`production-detail-expanded-1440.png`。
