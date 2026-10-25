@@ -9,18 +9,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-echo [3] 检查 dist\index.html...
-if not exist "dist\index.html" (
-  echo dist\index.html 不存在，开始构建...
-  call npm run build
-  if errorlevel 1 (
-    echo 构建失败
-    pause
-    exit /b 1
-  )
-)
-echo [4] 启动服务器...
-call npm start
-echo [5] 服务器退出，exitcode=%errorlevel%
+echo [3] 启动器会按需构建，随后启动服务...
+node tools\launch.ts
+echo [4] 启动器退出，exit=%errorlevel%
 pause
-

@@ -1,3 +1,6 @@
 # Skill 模板与已发布哈希绑定：换行一旦被转换，安装字节就和 history.json 对不上，
 # 升级会被误判成“用户自有文件”。固定为 LF，避免 core.autocrlf 改写。
 skills/isle/** text eol=lf
+
+# cmd.exe 依赖 CRLF：LF 行尾的批处理（尤其含中文）会被解析错位。
+*.cmd text eol=crlf

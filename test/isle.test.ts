@@ -10,6 +10,7 @@ import { SummaryMarkdown } from '../src/SummaryMarkdown.ts';
 import { Store, decodeBackup } from '../server/store.ts';
 import { hash, parseTasks, today, updateNext, updateRecord, updateTask } from '../server/tasks.ts';
 import { createApplication } from '../server/main.ts';
+import { browserInvocation } from '../tools/launch.ts';
 import { closeout, focusTask, handoff, worktrees } from '../shared/types.ts';
 
 async function fixture(t: import('node:test').TestContext) {
@@ -214,6 +215,26 @@ test('HTTP requires authentication, exact origin/host and JSON; only registered 
   });
   assert.ok(repeated.includes('案屿已在运行'));
   assert.ok(repeated.includes(launch));
+});
+
+test('launcher scripts keep the line endings and BOM their hosts require', async () => {
+  // cmd.exe 解析 LF 行尾的批处理时会错位（含中文更严重），PowerShell 5.1 读 UTF-8 需要 BOM。
+  for (const file of ['启动案屿.cmd', 'debug-start.cmd']) {
+    const text = await fs.readFile(file, 'utf8');
+    assert.ok(!/(^|[^\r])\n/.test(text), `${file} 必须使用 CRLF 行尾`);
+  }
+  const shortcut = await fs.readFile('tools/create-shortcut.ps1');
+  assert.equal(shortcut.subarray(0, 3).toString('hex'), 'efbbbf', 'create-shortcut.ps1 需要 UTF-8 BOM');
+});
+
+test('launcher hands the ready URL to the platform browser', () => {
+  const url = 'http://127.0.0.1:4317/?token=abc123';
+  const win = browserInvocation(url, 'win32');
+  assert.equal(win.command, 'cmd.exe');
+  assert.deepEqual(win.args, ['/c', 'start', '""', `"${url}"`]);
+  assert.equal(win.verbatim, true);
+  assert.deepEqual(browserInvocation(url, 'darwin'), { command: 'open', args: [url], verbatim: false });
+  assert.deepEqual(browserInvocation(url, 'linux'), { command: 'xdg-open', args: [url], verbatim: false });
 });
 
 test('focusTask resolves in-progress before todo, and handoff references it', () => {

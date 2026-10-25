@@ -138,7 +138,7 @@ export async function createApplication(options: { home: string; dev?: boolean; 
   };
 }
 
-async function main() {
+export async function main(): Promise<string> {
   const home = process.env.ISLE_HOME || path.join(os.homedir(), '.isle');
   const basePort = Number(process.env.ISLE_PORT || 4317);
   if (!Number.isInteger(basePort) || basePort < 1024 || basePort > 65535) throw new Error('ISLE_PORT 须为 1024–65535 的整数。');
@@ -149,7 +149,7 @@ async function main() {
       console.log(`\n案屿 v0.1 · 本机看板\n\n  ${url}\n\n清单：${app.store.registryFile}\n按 Ctrl+C 退出。\n`);
       const stop = async () => { await app.close(); process.exit(0); };
       process.once('SIGINT', stop); process.once('SIGTERM', stop);
-      return;
+      return url;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error;
       try {
@@ -165,8 +165,8 @@ async function main() {
           request.setTimeout(800, () => request.destroy(new Error('探测超时。')));
           request.on('error', reject);
         });
-        if (instance.app === 'isle-v0.1' && instance.homeId === app.homeId) {
-          console.log(`案屿已在运行：\n${instance.url}`); await app.close(); return;
+        if (instance.app === 'isle-v0.1' && instance.homeId === app.homeId && instance.url) {
+          console.log(`案屿已在运行：\n${instance.url}`); await app.close(); return instance.url;
         }
       } catch { /* The port belongs to another app; try the next loopback port. */ }
     }
