@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { GitHistory, Project, ProjectSkill, SkillFile, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
-import { hash, parseTasks, template, updateRecord } from './tasks.ts';
+import { hash, parseTasks, template, updateRecord, updateTask } from './tasks.ts';
 
 const runGit = promisify(execFile);
 
@@ -476,6 +476,37 @@ export class Store {
       try { updated = updateRecord(data, changes); }
       catch (error) { throw new AppError((error as Error).message, 422); }
       if (updated.equals(data)) return this.snapshot();
+      const backupFile = file + '.bak';
+      let previous: Buffer | undefined;
+      try { previous = (await readRegular(backupFile)).data; decodeBackup(previous, file); }
+      catch (error) { if (code(error) !== 'ENOENT') throw error; }
+      const backup = Buffer.from(JSON.stringify({ format: backupFormat, target: file, sha256: hash(data), content: data.toString('base64') }) + '\n');
+      await this.atomic(backupFile, backup, async () => {
+        try {
+          const current = (await readRegular(backupFile)).data;
+          if (!previous || !previous.equals(current)) throw new AppError('备份文件在写入期间发生变化，请重试。', 409);
+        } catch (error) { if (code(error) !== 'ENOENT' || previous) throw error; }
+      });
+      await this.atomic(file, updated, async () => {
+        await validateDirectory(entry.path);
+        if (hash((await readRegular(file)).data) !== expectedHash) throw new AppError('保存期间文件被外部修改，已停止写入，请刷新后核对。', 409);
+      });
+      return this.snapshot();
+    });
+  }
+
+  async editTask(id: string, line: unknown, action: unknown, expectedHash: unknown) {
+    return this.write(async () => {
+      const entry = (await this.registry()).entries.find(entry => entry.id === id);
+      if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+      await validateDirectory(entry.path);
+      const file = path.join(entry.path, 'TASKS.md');
+      const { data } = await readRegular(file);
+      if (expectedHash !== hash(data)) throw new AppError('TASKS.md 已被其他程序修改，请刷新后重试。', 409);
+      if (!parseTasks(data).readable) throw new AppError('文件内容无法识别，请先在原文件中修正。', 422);
+      let updated: Buffer;
+      try { updated = updateTask(data, line, action); }
+      catch (error) { throw new AppError((error as Error).message, 422); }
       const backupFile = file + '.bak';
       let previous: Buffer | undefined;
       try { previous = (await readRegular(backupFile)).data; decodeBackup(previous, file); }

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { GitHistory, Project, ProjectSkill, Snapshot, TaskState, Workspace, Workspaces } from '../shared/types.ts';
+import type { GitHistory, Project, ProjectSkill, Snapshot, Task, TaskState, Workspace, Workspaces } from '../shared/types.ts';
 import { closeout, focusTask, handoff, skillTransfer, worktrees } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
 import { orderHistory } from './history.ts';
@@ -129,6 +129,7 @@ function App() {
   const [formError, setFormError] = useState('');
   const [handoffProject, setHandoffProject] = useState<Project | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Project | null>(null);
+  const [taskDelete, setTaskDelete] = useState<{ project: Project; task: Task } | null>(null);
   const [handoffMode, setHandoffMode] = useState<'start' | 'close'>('start');
   const [transferFormat, setTransferFormat] = useState<TransferFormat>('full');
   const [goal, setGoal] = useState('');
@@ -512,6 +513,31 @@ function App() {
     const project = snapshot?.projects.find(project => project.id === editing?.id);
     if (project?.state === 'ok' && editing) setEditing({ ...editing, hash: project.hash, baseline: project[editing.kind], conflict: false, reviewed: true });
   }
+  async function completeTask(project: Project, task: Task) {
+    if (busy || editing) return;
+    setBusy(true);
+    try {
+      accept(await api('PATCH', `/${project.id}/tasks`, { line: task.line, action: 'complete', hash: project.hash }));
+      setNotice({ message: '任务已完成，已移入已完成分组' });
+    } catch (error) {
+      setNotice({ message: (error as Error).message, error: true });
+      if (error instanceof RequestError && error.status === 409) void refresh();
+    } finally { setBusy(false); }
+  }
+  async function removeTask() {
+    if (!taskDelete || busy) return;
+    const { project, task } = taskDelete;
+    setBusy(true);
+    try {
+      accept(await api('PATCH', `/${project.id}/tasks`, { line: task.line, action: 'delete', hash: project.hash }));
+      setTaskDelete(null);
+      setNotice({ message: '任务已删除' });
+    } catch (error) {
+      setTaskDelete(null);
+      setNotice({ message: (error as Error).message, error: true });
+      if (error instanceof RequestError && error.status === 409) void refresh();
+    } finally { setBusy(false); }
+  }
   async function remove(project: Project) {
     if (!data || busy) return;
     setBusy(true);
@@ -737,6 +763,10 @@ function App() {
                       {task.conflict && <span title="复选框与分节不一致" className={styles.taskWarning}>状态需核对</span>}
                     </div>}
                   </div>
+                  {task.state !== '已完成' && !task.conflict && <div className={styles.taskActions}>
+                    <button className={`${styles.quietButton} ${styles.taskAction}`} aria-label={`完成任务：${task.title}`} title="完成，移入已完成" disabled={busy || Boolean(editing)} onClick={() => void completeTask(current, task)}><Icon name="check" size={15} /></button>
+                    <button className={`${styles.quietButton} ${styles.taskAction} ${styles.taskDelete}`} aria-label={`删除任务：${task.title}`} title="删除任务" disabled={busy || Boolean(editing)} onClick={() => setTaskDelete({ project: current, task })}><Icon name="trash" size={15} /></button>
+                  </div>}
                 </li>;
               })}</ul>
             </Group>;
@@ -887,6 +917,11 @@ function App() {
     {removeTarget && <Modal title="移出看板" close={() => { if (!busy) setRemoveTarget(null); }}><div className={styles.projectForm}>
       <p>将「{removeTarget.name}」移出看板？项目目录和 TASKS.md 不会被删除，之后仍可重新添加。</p>
       <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setRemoveTarget(null)}>取消</button><button className={`${styles.primary} ${styles.dangerButton}`} disabled={busy} onClick={() => void remove(removeTarget)}>{busy ? '正在移出…' : '移出看板'}</button></div>
+    </div></Modal>}
+    {taskDelete && <Modal title="删除任务" close={() => { if (!busy) setTaskDelete(null); }}><div className={styles.projectForm}>
+      <p>从「{taskDelete.project.name}」的 TASKS.md 删除这条任务？只删任务行，交接摘要和工作留痕不会改动。</p>
+      <p className={styles.taskDeleteTitle}>{taskDelete.task.title}</p>
+      <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setTaskDelete(null)}>取消</button><button className={`${styles.primary} ${styles.dangerButton}`} disabled={busy} onClick={() => void removeTask()}>{busy ? '正在删除…' : '删除任务'}</button></div>
     </div></Modal>}
     {handoffProject && <Modal title={handoffMode === 'close' ? '收工回写' : '交给新 Agent'} close={() => setHandoffProject(null)}><div className={styles.projectForm}>
       <div className={styles.transferTabs} role="group" aria-label="交接阶段"><button disabled={busy} aria-pressed={handoffMode === 'close'} onClick={() => { setHandoffMode('close'); setTransferNote(''); }}>1 · 收工词</button><span>→</span><button disabled={busy} aria-pressed={handoffMode === 'start'} onClick={() => { setHandoffMode('start'); setTransferNote(''); }}>2 · 开工词</button></div>

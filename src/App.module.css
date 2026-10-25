@@ -2278,3 +2278,34 @@
   vertical-align: 1px;
   box-shadow: 0 1px 0 #d8b9ad;
 }
+
+/* ── 任务行快捷操作 ── */
+.task { flex-wrap: wrap; }
+.taskActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex: none;
+  padding-top: 1px;
+}
+.taskAction {
+  width: var(--control-sm);
+  min-width: var(--control-sm);
+  min-height: var(--control-sm);
+  padding: 0;
+  color: var(--muted);
+}
+.taskAction:hover:not(:disabled) { color: var(--ink); border-color: var(--ink); }
+.taskDelete:hover:not(:disabled) { color: var(--rust); border-color: var(--rust); background: #fbf5f1; }
+.taskDeleteTitle {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-1);
+  color: var(--ink);
+  font-size: var(--fs-ui);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}

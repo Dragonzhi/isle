@@ -165,6 +165,86 @@ export function updateNext(original: Buffer, next: string) {
   return updateRecord(original, { next });
 }
 
+function taskSectionRange(lines: string[], name: string) {
+  const starts: number[] = [];
+  let fence = '';
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index].replace(/[\r\n]+$/, '');
+    const marker = line.match(/^\s*(`{3,}|~{3,})/);
+    if (marker) {
+      if (!fence) fence = marker[1][0];
+      else if (fence === marker[1][0]) fence = '';
+      continue;
+    }
+    if (fence) continue;
+    const heading = line.match(/^##(?:[ \t]+(.*)|$)/);
+    if (!heading) continue;
+    const title = (heading[1] ?? '').replace(/[ \t]+#+$/, '').trim();
+    if (title === name) starts.push(index);
+  }
+  if (starts.length > 1) throw new Error(`${name}分节重复，请先在原文件中合并。`);
+  if (!starts.length) return undefined;
+  const start = starts[0];
+  let end = lines.length;
+  fence = '';
+  for (let index = start + 1; index < lines.length; index++) {
+    const line = lines[index].replace(/[\r\n]+$/, '');
+    const marker = line.match(/^\s*(`{3,}|~{3,})/);
+    if (marker) {
+      if (!fence) fence = marker[1][0];
+      else if (fence === marker[1][0]) fence = '';
+      continue;
+    }
+    if (fence) continue;
+    if (/^##(?:\s|$)/.test(line)) { end = index; break; }
+  }
+  return { start, end };
+}
+
+/**
+ * Toggles one unfinished task without touching the summary or work trail.
+ * Complete moves the exact line into ## 已完成 and marks it [x]; delete removes it.
+ */
+export function updateTask(original: Buffer, line: unknown, action: unknown) {
+  if (!Number.isInteger(line) || (line as number) < 1) throw new Error('任务行无效，请刷新后重试。');
+  if (action !== 'complete' && action !== 'delete') throw new Error('不支持的任务操作。');
+  const task = parseTasks(original).tasks.find(item => item.line === line);
+  if (!task) throw new Error('任务行已变化，请刷新后重试。');
+  if (task.state === '已完成' || task.conflict) throw new Error('只支持完成待办或进行中的任务。');
+  const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(original);
+  const { lines, fields, headerEnd } = inspect(text);
+  const index = (line as number) - 1;
+  const raw = lines[index]?.replace(/[\r\n]+$/, '') ?? '';
+  const match = raw.match(/^[-*][ \t]+(?:\[([ xX])\][ \t]*)?(\S.*)$/);
+  if (!match) throw new Error('任务行已变化，请刷新后重试。');
+  const newline = text.match(/\r\n|\n|\r/)?.[0] ?? '\n';
+  const ending = lines[index].match(/(?:\r\n|\n|\r)$/)?.[0] ?? '';
+  if (action === 'delete') {
+    lines.splice(index, 1);
+  } else {
+    const taskLine = `- [x] ${match[2]}${ending || newline}`;
+    lines.splice(index, 1);
+    const completed = taskSectionRange(lines, '已完成');
+    if (completed) {
+      const insertAt = completed.end;
+      if (insertAt > 0 && !/[\r\n]$/.test(lines[insertAt - 1])) lines[insertAt - 1] += newline;
+      lines.splice(insertAt, 0, taskLine);
+    } else {
+      if (lines.length && !/[\r\n]$/.test(lines.at(-1)!)) lines[lines.length - 1] += newline;
+      lines.push(`${newline}## 已完成${newline}${taskLine}`);
+    }
+  }
+  const updatedField = fields.get('updated')?.[0];
+  if (updatedField) {
+    const fieldEnding = lines[updatedField.index].match(/(?:\r\n|\n|\r)$/)?.[0] ?? '';
+    lines[updatedField.index] = updatedField.prefix + today() + fieldEnding;
+  } else {
+    if (headerEnd > 0 && !/[\r\n]$/.test(lines[headerEnd - 1])) lines[headerEnd - 1] += newline;
+    lines.splice(headerEnd, 0, `updated: ${today()}${newline}`);
+  }
+  return Buffer.from((text.startsWith('\uFEFF') ? '\uFEFF' : '') + lines.join(''), 'utf8');
+}
+
 export function updateRecord(original: Buffer, changes: { next?: unknown; summary?: unknown }) {
   if (changes.next !== undefined && (typeof changes.next !== 'string' || /[\r\n\0]/.test(changes.next) || changes.next.length > 4000)) {
     throw new Error('续接提示须为一行，且不超过 4000 个字符。');

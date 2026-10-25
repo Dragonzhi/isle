@@ -8,7 +8,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SummaryMarkdown } from '../src/SummaryMarkdown.ts';
 import { Store, decodeBackup } from '../server/store.ts';
-import { hash, parseTasks, today, updateNext, updateRecord } from '../server/tasks.ts';
+import { hash, parseTasks, today, updateNext, updateRecord, updateTask } from '../server/tasks.ts';
 import { createApplication } from '../server/main.ts';
 import { closeout, focusTask, handoff, worktrees } from '../shared/types.ts';
 
@@ -640,4 +640,76 @@ test('long or Markdown next is warned about but preserved in the file', () => {
   assert.equal(parsed.next, raw);
   assert.ok(parsed.warnings.some(warning => warning.includes('续接提示过长')));
   assert.ok(parsed.warnings.some(warning => warning.includes('Markdown')));
+});
+
+test('completing a task moves the exact line into 已完成 and preserves CRLF+BOM', () => {
+  const original = Buffer.from('\uFEFF# 项目\r\nnext: 保留\r\nupdated: 2020-01-01\r\n\r\n## 交接摘要\r\n\r\n## 待办\r\n- [ ] 第一件  @codex\r\n- [ ] 第二件\r\n\r\n## 进行中\r\n- [ ] 进行中\r\n\r\n## 已完成\r\n- [x] 旧完成\r\n\r\n## 工作留痕\r\n- 2026-10-17 · Codex：旧记录。\r\n');
+  const first = parseTasks(original).tasks.find(task => task.title === '第一件')!;
+  const saved = updateTask(original, first.line, 'complete');
+  const parsed = parseTasks(saved);
+  const moved = parsed.tasks.find(task => task.title === '第一件')!;
+  assert.equal(moved.state, '已完成');
+  assert.equal(moved.conflict, false);
+  assert.ok(saved.toString().startsWith('\uFEFF'));
+  assert.ok(saved.toString().includes('\r\n'));
+  assert.ok(saved.toString().includes(`updated: ${today()}`));
+  assert.ok(saved.toString().includes('- [x] 第一件  @codex\r\n'));
+  assert.ok(parsed.tasks.some(task => task.title === '第二件' && task.state === '待办'));
+});
+
+test('deleting a task removes only that line and rejects finished/unknown lines', () => {
+  const original = Buffer.from('# 项目\nnext: 保留\nupdated: 2020-01-01\n\n## 待办\n- [ ] 第一件  @codex\n- [ ] 第二件\n\n## 已完成\n- [x] 旧完成\n');
+  const first = parseTasks(original).tasks.find(task => task.title === '第一件')!;
+  const saved = updateTask(original, first.line, 'delete');
+  assert.equal(parseTasks(saved).tasks.some(task => task.title === '第一件'), false);
+  assert.ok(parseTasks(saved).tasks.some(task => task.title === '第二件'));
+  assert.ok(saved.toString().includes(`updated: ${today()}`));
+  const completed = parseTasks(original).tasks.find(task => task.state === '已完成')!;
+  assert.throws(() => updateTask(original, completed.line, 'complete'), /只支持/);
+  assert.throws(() => updateTask(original, 999, 'delete'), /任务行/);
+  assert.throws(() => updateTask(original, first.line, 'archive'), /不支持/);
+});
+
+test('completing a task creates 已完成 when the section is missing', () => {
+  const original = Buffer.from('# 项目\nnext: 保留\n\n## 待办\n- [ ] 唯一任务\n');
+  const line = parseTasks(original).tasks[0].line;
+  const saved = updateTask(original, line, 'complete').toString();
+  assert.ok(saved.includes('## 已完成\n- [x] 唯一任务'));
+  assert.equal(parseTasks(Buffer.from(saved)).tasks[0].state, '已完成');
+});
+
+test('task endpoint completes and deletes a task with hash protection', async t => {
+  const fixtureData = await fixture(t);
+  const original = Buffer.from('# 项目\nnext: 保留\n\n## 待办\n- [ ] 第一件\n- [ ] 第二件\n\n## 已完成\n');
+  await fs.writeFile(fixtureData.file, original);
+  const app = await createApplication({ home: fixtureData.store.home });
+  t.after(() => app.close());
+  const launch = await app.listen(0);
+  const origin = new URL(launch).origin;
+  const login = await fetch(launch, { redirect: 'manual' });
+  const cookie = login.headers.get('set-cookie')!.split(';')[0];
+  const headers = { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' };
+  const initial = await (await fetch(origin + '/api/projects', { headers: { Cookie: cookie } })).json();
+  const board = await (await fetch(origin + '/api/projects', {
+    method: 'POST', headers, body: JSON.stringify({ path: fixtureData.project, registryHash: initial.registryHash }),
+  })).json();
+  const project = board.projects[0];
+  const first = project.tasks.find((task: { title: string }) => task.title === '第一件');
+  const completed = await fetch(origin + '/api/projects/' + project.id + '/tasks', {
+    method: 'PATCH', headers, body: JSON.stringify({ line: first.line, action: 'complete', hash: project.hash }),
+  });
+  assert.equal(completed.status, 200);
+  const afterComplete = await completed.json();
+  assert.equal(afterComplete.projects[0].tasks.find((task: { title: string }) => task.title === '第一件').state, '已完成');
+  const second = afterComplete.projects[0].tasks.find((task: { title: string }) => task.title === '第二件');
+  const deleted = await fetch(origin + '/api/projects/' + project.id + '/tasks', {
+    method: 'PATCH', headers, body: JSON.stringify({ line: second.line, action: 'delete', hash: afterComplete.projects[0].hash }),
+  });
+  assert.equal(deleted.status, 200);
+  const afterDelete = await deleted.json();
+  assert.equal(afterDelete.projects[0].tasks.some((task: { title: string }) => task.title === '第二件'), false);
+  const stale = await fetch(origin + '/api/projects/' + project.id + '/tasks', {
+    method: 'PATCH', headers, body: JSON.stringify({ line: second.line, action: 'delete', hash: afterComplete.projects[0].hash }),
+  });
+  assert.equal(stale.status, 409);
 });
