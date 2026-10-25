@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SummaryMarkdown } from '../src/SummaryMarkdown.ts';
-import { Store, decodeBackup } from '../server/store.ts';
+import { Store, decodeBackup, directoryInvocation } from '../server/store.ts';
 import { hash, parseTasks, today, updateNext, updateRecord, updateTask } from '../server/tasks.ts';
 import { createApplication } from '../server/main.ts';
 import { browserInvocation } from '../tools/launch.ts';
@@ -217,6 +217,34 @@ test('HTTP requires authentication, exact origin/host and JSON; only registered 
   assert.ok(repeated.includes(launch));
 });
 
+test('opening a project directory needs the page, a session and a registered directory', async t => {
+  const fixtureData = await fixture(t);
+  const opened: string[] = [];
+  const app = await createApplication({ home: fixtureData.store.home, reveal: async directory => { opened.push(directory); } });
+  t.after(() => app.close());
+  const launch = await app.listen(0);
+  const origin = new URL(launch).origin;
+  const login = await fetch(launch, { redirect: 'manual' });
+  const cookie = login.headers.get('set-cookie')!.split(';')[0];
+  const headers = { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' };
+  const snapshot = await (await fetch(origin + '/api/projects', { headers: { Cookie: cookie } })).json();
+  const added = await fetch(origin + '/api/projects', { method: 'POST', headers, body: JSON.stringify({ path: fixtureData.project, registryHash: snapshot.registryHash, installSkill: false }) });
+  assert.equal(added.status, 201);
+  const project = (await added.json()).projects[0];
+  const endpoint = origin + `/api/projects/${project.id}/reveal`;
+  const reveal = (init: RequestInit = {}) => fetch(endpoint, { method: 'POST', ...init });
+  assert.equal((await reveal({ headers: { Origin: origin, 'Content-Type': 'application/json' }, body: '{}' })).status, 401);
+  assert.equal((await reveal({ headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
+  assert.equal((await reveal({ headers: { Cookie: cookie, Origin: 'https://evil.example', 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
+  assert.equal((await fetch(endpoint, { headers: { Cookie: cookie } })).status, 405);
+  assert.equal((await reveal({ headers, body: '{}' })).status, 200);
+  assert.deepEqual(opened, [await fs.realpath(fixtureData.project)]);
+  assert.equal((await fetch(origin + `/api/projects/${'a'.repeat(24)}/reveal`, { method: 'POST', headers, body: '{}' })).status, 404);
+  await fs.rm(fixtureData.project, { recursive: true, force: true });
+  assert.equal((await reveal({ headers, body: '{}' })).status, 400);
+  assert.equal(opened.length, 1);
+});
+
 test('launcher scripts keep the line endings and BOM their hosts require', async () => {
   // cmd.exe 解析 LF 行尾的批处理时会错位（含中文更严重），PowerShell 5.1 读 UTF-8 需要 BOM。
   for (const file of ['启动案屿.cmd', 'debug-start.cmd']) {
@@ -235,6 +263,12 @@ test('launcher hands the ready URL to the platform browser', () => {
   assert.equal(win.verbatim, true);
   assert.deepEqual(browserInvocation(url, 'darwin'), { command: 'open', args: [url], verbatim: false });
   assert.deepEqual(browserInvocation(url, 'linux'), { command: 'xdg-open', args: [url], verbatim: false });
+});
+
+test('directory opener uses the platform file manager with only the validated path', () => {
+  assert.deepEqual(directoryInvocation('C:\\work\\项目', 'win32'), { command: 'explorer.exe', args: ['C:\\work\\项目'] });
+  assert.deepEqual(directoryInvocation('/tmp/项目', 'darwin'), { command: 'open', args: ['/tmp/项目'] });
+  assert.deepEqual(directoryInvocation('/tmp/项目', 'linux'), { command: 'xdg-open', args: ['/tmp/项目'] });
 });
 
 test('focusTask resolves in-progress before todo, and handoff references it', () => {

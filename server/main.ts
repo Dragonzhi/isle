@@ -31,8 +31,8 @@ async function body(req: http.IncomingMessage) {
   } catch { throw new AppError('请求须为有效的 JSON 对象。'); }
 }
 
-export async function createApplication(options: { home: string; dev?: boolean; port?: number }) {
-  const store = new Store(options.home);
+export async function createApplication(options: { home: string; dev?: boolean; port?: number; reveal?: (directory: string) => Promise<void> }) {
+  const store = new Store(options.home, options.reveal);
   await store.init();
   const token = randomBytes(32).toString('hex');
   const homeId = hash(path.resolve(options.home));
@@ -73,6 +73,13 @@ export async function createApplication(options: { home: string; dev?: boolean; 
         if (req.method === 'GET' && gitRoute) { json(await store.gitHistory(gitRoute[1])); return; }
         const skillRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/skill$/);
         if (req.method === 'GET' && skillRoute) { json(await store.projectSkill(skillRoute[1])); return; }
+        const revealRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/reveal$/);
+        if (revealRoute) {
+          if (req.method !== 'POST') throw new AppError('不支持的请求方式。', 405);
+          if (req.headers.origin !== origin) throw new AppError('打开目录的请求必须来自案屿页面。', 403);
+          await body(req);
+          json(await store.openProjectDirectory(revealRoute[1])); return;
+        }
         const workspaceRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/workspaces$/);
         if (req.method === 'GET' && workspaceRoute) { json(await store.workspaces(workspaceRoute[1])); return; }
         const taskRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/tasks$/);

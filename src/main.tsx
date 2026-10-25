@@ -26,7 +26,7 @@ async function api(method = 'GET', suffix = '', input?: unknown, endpoint = '/ap
   return request(method, suffix, input, endpoint);
 }
 
-function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron' | 'list' | 'grid' | 'more' | 'check'; size?: number; strokeWidth?: number }) {
+function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron' | 'list' | 'grid' | 'more' | 'check' | 'folder'; size?: number; strokeWidth?: number }) {
   const paths = {
     plus: 'M12 5v14M5 12h14', copy: 'M9 9h11v11H9zM15 9V4H4v11h5',
     arrow: 'M5 12h14m-6-6 6 6-6 6', refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12 0l2 5M4 12l2 5a7 7 0 0 0 12 0',
@@ -40,6 +40,7 @@ function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 
     grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
     more: 'M5 12h.01M12 12h.01M19 12h.01',
     check: 'M20 6 9 17l-5-5',
+    folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z',
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
@@ -402,6 +403,15 @@ function App() {
     try { await navigator.clipboard.writeText(command); setNotice({ message: '已复制提交/推送命令，粘贴到终端自行运行；案屿不会代替你执行。' }); }
     catch { setGitCopy(command); }
   }
+  async function openFolder(project: Project) {
+    if (busy || project.state !== 'ok') return;
+    setBusy(true);
+    try {
+      await request('POST', `/${project.id}/reveal`, {});
+      setNotice({ message: '已在系统文件管理器中打开项目目录。' });
+    } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
+    finally { setBusy(false); }
+  }
   useEffect(() => {
     if (current && current.state === 'ok') void loadGit(current);
     else setGit(previous => previous.id ? { id: '', history: null, loading: false, error: '' } : previous);
@@ -715,6 +725,7 @@ function App() {
             </div>
           </section>
           <div className={styles.projectUtilities} role="group" aria-label="项目设置与工作区">
+            <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={busy || Boolean(editing) || current.state !== 'ok'} title="在系统文件管理器中打开这个目录；之后可在其中用编辑器打开" onClick={() => void openFolder(current)}><Icon name="folder" size={14} />打开目录</button>
             <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={busy || Boolean(editing) || current.state !== 'ok'} onClick={() => void openWorkspacePicker(current)}><Icon name="plus" size={14} />添加已有工作区</button>
             <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" size={14} />刷新记录</button>
             <span className={styles.utilitySpacer} />
@@ -825,7 +836,7 @@ function App() {
             <p className={styles.skillDescription}>提供 Codex、OpenCode、Claude Code 和 TRAE 的项目入口。补充缺失文件，并把官方旧版升级到当前版本；官方旧版以外的同名文件（含你改过的）保留不覆盖。</p>
             {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{({ ready: '就绪', missing: '缺失', outdated: '官方旧版，可升级', custom: '已有不同内容，未覆盖', error: '无法访问' })[file.state]}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
           </section>}
-          <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><span>案屿只读取记录、生成文字，不执行命令</span></footer>
+          <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><span>案屿只读取记录、生成文字，不执行项目命令</span></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
       </> : <>
         <div className={styles.toolbar}>

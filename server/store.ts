@@ -1,7 +1,7 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { GitHistory, Project, ProjectSkill, SkillFile, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
 import { hash, parseTasks, template, updateRecord, updateTask } from './tasks.ts';
@@ -70,6 +70,24 @@ async function readRegular(file: string) {
     if (info.ino !== opened.ino || info.dev !== opened.dev) throw new AppError('读取时文件发生变化，请刷新。', 409);
     return { data: await handle.readFile(), info: opened };
   } finally { await handle.close(); }
+}
+
+// Opening a folder is navigation, not a project operation: the directory is already registered and
+// validated, and no shell interprets it. Windows Explorer exits with code 1 even when the window
+// opens, so success is measured by the process spawning, not by its exit code.
+export function directoryInvocation(directory: string, platform: NodeJS.Platform = process.platform) {
+  if (platform === 'win32') return { command: 'explorer.exe', args: [directory] };
+  if (platform === 'darwin') return { command: 'open', args: [directory] };
+  return { command: 'xdg-open', args: [directory] };
+}
+
+function openDirectory(directory: string) {
+  return new Promise<void>((resolve, reject) => {
+    const { command, args } = directoryInvocation(directory);
+    const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true });
+    child.once('error', () => reject(new AppError('无法调用系统文件管理器，请手动打开这个目录。', 500)));
+    child.once('spawn', () => { child.unref(); resolve(); });
+  });
 }
 
 export async function validateDirectory(input: unknown) {
@@ -144,9 +162,11 @@ export class Store {
   home: string;
   registryFile: string;
   settingsFile: string;
+  private readonly revealDirectory: (directory: string) => Promise<void>;
   private pending: Promise<unknown> = Promise.resolve();
-  constructor(home: string) {
+  constructor(home: string, revealDirectory: (directory: string) => Promise<void> = openDirectory) {
     this.home = path.resolve(home);
+    this.revealDirectory = revealDirectory;
     this.registryFile = path.join(this.home, 'projects.txt');
     this.settingsFile = path.join(this.home, 'settings.json');
   }
@@ -424,6 +444,13 @@ export class Store {
       await validateDirectory(entry.path);
       return this.ensureSkill(entry.path);
     });
+  }
+
+  async openProjectDirectory(id: string) {
+    const entry = (await this.registry()).entries.find(item => item.id === id);
+    if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+    await this.revealDirectory(await validateDirectory(entry.path));
+    return { opened: true };
   }
 
   async saveRegistry(registry: Registry, text: string) {
