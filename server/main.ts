@@ -86,7 +86,7 @@ export async function createApplication(options: { home: string; dev?: boolean; 
         if (!['POST', 'PATCH', 'DELETE'].includes(req.method ?? '')) throw new AppError('不支持的请求方式。', 405);
         if (req.headers.origin !== origin) throw new AppError('写入请求必须来自案屿页面。', 403);
         const input = await body(req);
-        if (req.method === 'PATCH' && taskRoute) { json(await store.editTask(taskRoute[1], input.line, input.action, input.hash)); return; }
+        if (req.method === 'PATCH' && taskRoute) { json(await store.editTask(taskRoute[1], input.line, input.action, input.hash, input.title)); return; }
         if (req.method === 'POST' && workspaceRoute) { json(await store.addWorkspace(workspaceRoute[1], { path: input.path, name: input.name, registryHash: input.registryHash, installSkill: input.installSkill }), 201); return; }
         if (req.method === 'POST' && skillRoute) { json(await store.installProjectSkill(skillRoute[1])); return; }
         if (req.method === 'PATCH' && url.pathname === '/api/agents') { json(await store.saveAgents(input.agents, input.settingsHash)); return; }

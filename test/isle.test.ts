@@ -740,6 +740,26 @@ test('deleting a task removes only that line and rejects finished/unknown lines'
   assert.throws(() => updateTask(original, first.line, 'archive'), /不支持/);
 });
 
+test('editing a task replaces only its title and keeps checkbox, tags, spacing and line endings', () => {
+  const original = Buffer.from('\uFEFF# 项目\r\nnext: 保留\r\nupdated: 2020-01-01\r\n\r\n## 待办\r\n- [ ]   第一件  @codex @trae\r\n- [ ] 第二件\r\n\r\n## 已完成\r\n- [x] 旧完成 @codex\r\n');
+  const first = parseTasks(original).tasks.find(task => task.title === '第一件')!;
+  const saved = updateTask(original, first.line, 'edit', '第一件改名');
+  const parsed = parseTasks(saved);
+  const edited = parsed.tasks.find(task => task.title === '第一件改名')!;
+  assert.deepEqual(edited.tags, ['@codex', '@trae']);
+  assert.equal(edited.state, '待办');
+  assert.ok(saved.toString().startsWith('\uFEFF'));
+  assert.ok(saved.toString().includes('- [ ]   第一件改名  @codex @trae\r\n'));
+  assert.ok(saved.toString().includes(`updated: ${today()}`));
+  const done = parsed.tasks.find(task => task.title === '旧完成')!;
+  assert.equal(parseTasks(updateTask(saved, done.line, 'edit', '旧完成改名')).tasks.find(task => task.title === '旧完成改名')!.state, '已完成');
+  assert.deepEqual(updateTask(original, first.line, 'edit', '第一件'), original);
+  assert.throws(() => updateTask(original, first.line, 'edit', '   '), /不能为空/);
+  assert.throws(() => updateTask(original, first.line, 'edit', '两行\n任务'), /一行/);
+  assert.throws(() => updateTask(original, first.line, 'edit'), /任务内容/);
+  assert.throws(() => updateTask(original, first.line, 'edit', 'x'.repeat(301)), /300/);
+});
+
 test('completing a task creates 已完成 when the section is missing', () => {
   const original = Buffer.from('# 项目\nnext: 保留\n\n## 待办\n- [ ] 唯一任务\n');
   const line = parseTasks(original).tasks[0].line;
@@ -781,5 +801,35 @@ test('task endpoint completes and deletes a task with hash protection', async t 
   const stale = await fetch(origin + '/api/projects/' + project.id + '/tasks', {
     method: 'PATCH', headers, body: JSON.stringify({ line: second.line, action: 'delete', hash: afterComplete.projects[0].hash }),
   });
+  assert.equal(stale.status, 409);
+});
+
+test('task endpoint edits a title while keeping tags and hash protection', async t => {
+  const fixtureData = await fixture(t);
+  await fs.writeFile(fixtureData.file, '# 项目\nnext: 保留\n\n## 待办\n- [ ] 第一件  @codex\n- [ ] 第二件\n');
+  const app = await createApplication({ home: fixtureData.store.home });
+  t.after(() => app.close());
+  const launch = await app.listen(0);
+  const origin = new URL(launch).origin;
+  const login = await fetch(launch, { redirect: 'manual' });
+  const cookie = login.headers.get('set-cookie')!.split(';')[0];
+  const headers = { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' };
+  const initial = await (await fetch(origin + '/api/projects', { headers: { Cookie: cookie } })).json();
+  const board = await (await fetch(origin + '/api/projects', {
+    method: 'POST', headers, body: JSON.stringify({ path: fixtureData.project, registryHash: initial.registryHash, installSkill: false }),
+  })).json();
+  const project = board.projects[0];
+  const first = project.tasks.find((task: { title: string }) => task.title === '第一件');
+  const endpoint = origin + '/api/projects/' + project.id + '/tasks';
+  const edited = await fetch(endpoint, { method: 'PATCH', headers, body: JSON.stringify({ line: first.line, action: 'edit', title: '第一件改名', hash: project.hash }) });
+  assert.equal(edited.status, 200);
+  const afterEdit = await edited.json();
+  const changed = afterEdit.projects[0].tasks.find((task: { title: string }) => task.title === '第一件改名');
+  assert.deepEqual(changed.tags, ['@codex']);
+  assert.equal(changed.state, '待办');
+  assert.ok((await fs.readFile(fixtureData.file, 'utf8')).includes('- [ ] 第一件改名  @codex'));
+  const empty = await fetch(endpoint, { method: 'PATCH', headers, body: JSON.stringify({ line: first.line, action: 'edit', title: '   ', hash: afterEdit.projects[0].hash }) });
+  assert.equal(empty.status, 422);
+  const stale = await fetch(endpoint, { method: 'PATCH', headers, body: JSON.stringify({ line: first.line, action: 'edit', title: '再改', hash: project.hash }) });
   assert.equal(stale.status, 409);
 });

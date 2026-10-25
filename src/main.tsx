@@ -124,6 +124,7 @@ function App() {
   const [openSections, setOpenSections] = useState<Record<DetailSection, boolean>>({ summary: false, history: false, git: false });
   const [selected, setSelected] = useState('');
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [taskEdit, setTaskEdit] = useState<{ id: string; line: number; value: string; hash: string } | null>(null);
   const [form, setForm] = useState<'add' | Project | null>(null);
   const [formPath, setFormPath] = useState('');
   const [formName, setFormName] = useState('');
@@ -424,7 +425,7 @@ function App() {
 
   useEffect(() => {
     function keyboard(event: KeyboardEvent) {
-      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || workspacePicker || settingsOpen || moreOpen || currentId || busy || editing || event.isComposing) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || form || agentDraft || handoffProject || summaryCopy !== null || gitCopy !== null || worktreeOpen || workspacePicker || settingsOpen || moreOpen || currentId || busy || editing || taskEdit || event.isComposing) return;
       const target = event.target as HTMLElement;
       if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
       if (event.key === 'Escape') { setSelected(''); return; }
@@ -441,7 +442,8 @@ function App() {
     }
     window.addEventListener('keydown', keyboard);
     return () => window.removeEventListener('keydown', keyboard);
-  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, workspacePicker, settingsOpen, moreOpen, currentId, busy, editing]);
+  }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, workspacePicker, settingsOpen, moreOpen, currentId, busy, editing, taskEdit]);
+  useEffect(() => { setTaskEdit(null); }, [currentId]);
 
   async function openWorkspacePicker(project: Project) {
     setWorkspacePicker({ project, list: null, selected: [], names: {}, installSkill: true, loading: true, error: '' });
@@ -525,7 +527,7 @@ function App() {
     if (project?.state === 'ok' && editing) setEditing({ ...editing, hash: project.hash, baseline: project[editing.kind], conflict: false, reviewed: true });
   }
   async function completeTask(project: Project, task: Task) {
-    if (busy || editing) return;
+    if (busy || editing || taskEdit) return;
     setBusy(true);
     try {
       accept(await api('PATCH', `/${project.id}/tasks`, { line: task.line, action: 'complete', hash: project.hash }));
@@ -533,6 +535,26 @@ function App() {
     } catch (error) {
       setNotice({ message: (error as Error).message, error: true });
       if (error instanceof RequestError && error.status === 409) void refresh();
+    } finally { setBusy(false); }
+  }
+  function startTaskEdit(project: Project, task: Task) {
+    if (busy || editing || project.state !== 'ok') return;
+    setTaskEdit({ id: project.id, line: task.line, value: task.title, hash: project.hash });
+    setNotice(null);
+  }
+  async function saveTaskEdit(event: React.FormEvent, project: Project) {
+    event.preventDefault();
+    if (!taskEdit || busy) return;
+    const title = taskEdit.value.trim();
+    if (!title) { setNotice({ message: '任务内容不能为空。', error: true }); return; }
+    setBusy(true);
+    try {
+      accept(await api('PATCH', `/${project.id}/tasks`, { line: taskEdit.line, action: 'edit', title, hash: taskEdit.hash }));
+      setTaskEdit(null);
+      setNotice({ message: '任务已更新' });
+    } catch (error) {
+      setNotice({ message: (error as Error).message, error: true });
+      if (error instanceof RequestError && error.status === 409) { setTaskEdit(null); void refresh(); }
     } finally { setBusy(false); }
   }
   async function removeTask() {
@@ -768,18 +790,30 @@ function App() {
               {state === '已完成' ? <summary>{groupTitle}</summary> : groupTitle}
               <ul className={styles.taskList}>{current.tasks.filter(task => task.state === state).map(task => {
                 const isFocus = focus && task.line === focus.line && task.state !== '已完成';
+                const editingTask = taskEdit?.id === current.id && taskEdit.line === task.line ? taskEdit : null;
                 return <li key={task.line} className={`${styles.task} ${state === '已完成' ? styles.doneTask : ''}`}>
                   <span className={styles.taskMark} data-done={state === '已完成' ? 'true' : 'false'} aria-hidden="true" />
-                  <div className={styles.taskCopy}><span className={styles.taskTitle}>{task.title}</span>
+                  {editingTask ? <form className={`${styles.editForm} ${styles.taskEditForm}`} onSubmit={event => void saveTaskEdit(event, current)}>
+                    <input autoFocus aria-label={`编辑任务：${task.title}`} value={editingTask.value} maxLength={300} disabled={busy} placeholder="任务内容" onChange={event => setTaskEdit({ ...editingTask, value: event.target.value })} onKeyDown={event => {
+                      if (event.key === 'Escape' && !busy) { event.stopPropagation(); setTaskEdit(null); }
+                      if (event.key === 'Enter' && event.nativeEvent.isComposing) event.preventDefault();
+                    }} />
+                    <button className={styles.smallButton} disabled={busy || !editingTask.value.trim()}>保存</button>
+                    <button type="button" className={styles.textButton} disabled={busy} onClick={() => setTaskEdit(null)}>取消</button>
+                  </form>
+                  : <div className={styles.taskCopy}><span className={styles.taskTitle}>{task.title}</span>
                     {(isFocus || task.tags.length > 0 || task.conflict) && <div className={styles.taskMeta}>
                       {isFocus && <span className={styles.focusBadge}>当前聚焦</span>}
                       {task.tags.map(tag => <small className={styles.tag} key={tag}>{tag}</small>)}
                       {task.conflict && <span title="复选框与分节不一致" className={styles.taskWarning}>状态需核对</span>}
                     </div>}
-                  </div>
-                  {task.state !== '已完成' && !task.conflict && <div className={styles.taskActions}>
-                    <button className={`${styles.quietButton} ${styles.taskAction}`} aria-label={`完成任务：${task.title}`} title="完成，移入已完成" disabled={busy || Boolean(editing)} onClick={() => void completeTask(current, task)}><Icon name="check" size={15} /></button>
-                    <button className={`${styles.quietButton} ${styles.taskAction} ${styles.taskDelete}`} aria-label={`删除任务：${task.title}`} title="删除任务" disabled={busy || Boolean(editing)} onClick={() => setTaskDelete({ project: current, task })}><Icon name="trash" size={15} /></button>
+                  </div>}
+                  {!editingTask && <div className={styles.taskActions}>
+                    <button className={`${styles.quietButton} ${styles.taskAction}`} aria-label={`编辑任务：${task.title}`} title="编辑任务" disabled={busy || Boolean(editing) || Boolean(taskEdit)} onClick={() => startTaskEdit(current, task)}><Icon name="edit" size={15} /></button>
+                    {task.state !== '已完成' && !task.conflict && <>
+                      <button className={`${styles.quietButton} ${styles.taskAction}`} aria-label={`完成任务：${task.title}`} title="完成，移入已完成" disabled={busy || Boolean(editing) || Boolean(taskEdit)} onClick={() => void completeTask(current, task)}><Icon name="check" size={15} /></button>
+                      <button className={`${styles.quietButton} ${styles.taskAction} ${styles.taskDelete}`} aria-label={`删除任务：${task.title}`} title="删除任务" disabled={busy || Boolean(editing) || Boolean(taskEdit)} onClick={() => setTaskDelete({ project: current, task })}><Icon name="trash" size={15} /></button>
+                    </>}
                   </div>}
                 </li>;
               })}</ul>

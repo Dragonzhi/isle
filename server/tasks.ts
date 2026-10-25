@@ -202,15 +202,22 @@ function taskSectionRange(lines: string[], name: string) {
 }
 
 /**
- * Toggles one unfinished task without touching the summary or work trail.
- * Complete moves the exact line into ## 已完成 and marks it [x]; delete removes it.
+ * Edits one task line without touching the summary or work trail.
+ * complete moves the exact line into ## 已完成 and marks it [x]; delete removes it;
+ * edit replaces only the title and keeps checkbox, indentation and trailing @tags.
  */
-export function updateTask(original: Buffer, line: unknown, action: unknown) {
+export function updateTask(original: Buffer, line: unknown, action: unknown, title?: unknown) {
   if (!Number.isInteger(line) || (line as number) < 1) throw new Error('任务行无效，请刷新后重试。');
-  if (action !== 'complete' && action !== 'delete') throw new Error('不支持的任务操作。');
+  if (action !== 'complete' && action !== 'delete' && action !== 'edit') throw new Error('不支持的任务操作。');
+  if (action === 'edit') {
+    if (typeof title !== 'string') throw new Error('请填写任务内容。');
+    if (/[\r\n\0]/.test(title)) throw new Error('任务内容须为一行。');
+    if (!title.trim()) throw new Error('任务内容不能为空。');
+    if (title.trim().length > 300) throw new Error('任务内容不超过 300 个字符。');
+  }
   const task = parseTasks(original).tasks.find(item => item.line === line);
   if (!task) throw new Error('任务行已变化，请刷新后重试。');
-  if (task.state === '已完成' || task.conflict) throw new Error('只支持完成待办或进行中的任务。');
+  if (action !== 'edit' && (task.state === '已完成' || task.conflict)) throw new Error('只支持完成待办或进行中的任务。');
   const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(original);
   const { lines, fields, headerEnd } = inspect(text);
   const index = (line as number) - 1;
@@ -221,6 +228,15 @@ export function updateTask(original: Buffer, line: unknown, action: unknown) {
   const ending = lines[index].match(/(?:\r\n|\n|\r)$/)?.[0] ?? '';
   if (action === 'delete') {
     lines.splice(index, 1);
+  } else if (action === 'edit') {
+    const prefix = raw.match(/^[-*][ \t]+(?:\[[ xX]\][ \t]*)?/)?.[0] ?? '';
+    const body = raw.slice(prefix.length);
+    // Keep the trailing @tags and the spacing before them verbatim; only the title changes.
+    const tags = body.match(/((?:[ \t]*@[A-Za-z0-9_-]+)+)[ \t]*$/)?.[1] ?? '';
+    const tail = tags && !/^[ \t]/.test(tags) ? ` ${tags}` : tags;
+    const edited = `${prefix}${(title as string).trim()}${tail}${ending}`;
+    if (edited === lines[index]) return original;
+    lines[index] = edited;
   } else {
     const taskLine = `- [x] ${match[2]}${ending || newline}`;
     lines.splice(index, 1);

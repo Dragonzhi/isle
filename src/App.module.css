@@ -2299,6 +2299,8 @@
 }
 .taskAction:hover:not(:disabled) { color: var(--ink); border-color: var(--ink); }
 .taskDelete:hover:not(:disabled) { color: var(--rust); border-color: var(--rust); background: #fbf5f1; }
+.taskEditForm { flex: 1; min-width: 0; padding: 0; }
+.taskEditForm > input { min-width: 120px; font-size: 16px; }
 .taskDeleteTitle {
   margin: 12px 0 0;
   padding: 10px 12px;

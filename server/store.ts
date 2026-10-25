@@ -523,7 +523,7 @@ export class Store {
     });
   }
 
-  async editTask(id: string, line: unknown, action: unknown, expectedHash: unknown) {
+  async editTask(id: string, line: unknown, action: unknown, expectedHash: unknown, title?: unknown) {
     return this.write(async () => {
       const entry = (await this.registry()).entries.find(entry => entry.id === id);
       if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
@@ -533,8 +533,9 @@ export class Store {
       if (expectedHash !== hash(data)) throw new AppError('TASKS.md 已被其他程序修改，请刷新后重试。', 409);
       if (!parseTasks(data).readable) throw new AppError('文件内容无法识别，请先在原文件中修正。', 422);
       let updated: Buffer;
-      try { updated = updateTask(data, line, action); }
+      try { updated = updateTask(data, line, action, title); }
       catch (error) { throw new AppError((error as Error).message, 422); }
+      if (updated.equals(data)) return this.snapshot();
       const backupFile = file + '.bak';
       let previous: Buffer | undefined;
       try { previous = (await readRegular(backupFile)).data; decodeBackup(previous, file); }
