@@ -246,7 +246,8 @@ export class Store {
   }
 
   // Read-only git history for the detail page. Never writes to the project; runs git with an args array (no shell),
-  // a hard timeout, and gc disabled so nothing in .git is modified.
+  // a hard timeout, and gc disabled so nothing in .git is modified. Merge commits are skipped: the trace in
+  // TASKS.md already carries the workflow/PR narrative, so this list stays a compact check of real changes.
   async gitHistory(id: string): Promise<GitHistory> {
     const entry = (await this.registry()).entries.find(item => item.id === id);
     if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
@@ -259,7 +260,7 @@ export class Store {
     catch (error) { if (code(error) !== 'ENOENT') return { available: false, reason: '无法读取该目录。', entries: [] }; }
     if (!ownsGit) return { available: false, reason: '这个目录自身不是 Git 仓库（找不到 .git）。', entries: [] };
     try {
-      const { stdout } = await runGit('git', ['-c', 'gc.auto=0', '--no-pager', '-C', directory, 'log', '-n', '40', '--date=short', '--pretty=format:%h%x1f%ad%x1f%s'], { timeout: 6000, maxBuffer: 1024 * 1024, windowsHide: true });
+      const { stdout } = await runGit('git', ['-c', 'gc.auto=0', '--no-pager', '-C', directory, 'log', '--no-merges', '-n', '40', '--date=short', '--pretty=format:%h%x1f%ad%x1f%s'], { timeout: 6000, maxBuffer: 1024 * 1024, windowsHide: true });
       const entries = String(stdout).split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean).map(line => {
         const [hash, date, ...rest] = line.split('\x1f');
         return { hash, date, message: rest.join('\x1f') };

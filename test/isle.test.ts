@@ -526,6 +526,21 @@ test('git history is read-only: a repo lists entries, a non-repo degrades, unkno
   assert.match(history.entries[0].hash, /^[0-9a-f]{7,}$/);
   assert.match(history.entries[0].date, /^\d{4}-\d{2}-\d{2}$/);
 
+  // 合并提交不进列表：留痕已承载流程叙事，Git 只核对实际改动。
+  await git(['checkout', '-b', 'side']);
+  await fs.writeFile(path.join(repo, 'b.txt'), 'side\n');
+  await git(['add', '.']);
+  await git(['commit', '-m', '分支提交']);
+  await git(['checkout', 'main']);
+  await fs.writeFile(path.join(repo, 'a.txt'), 'three\n');
+  await git(['commit', '-am', '主干提交']);
+  await git(['merge', '--no-ff', '-m', '合并分支', 'side']);
+  const merged = await store.gitHistory(id);
+  assert.equal(merged.available, true);
+  assert.ok(merged.entries.every(entry => !/合并分支/.test(entry.message)));
+  assert.ok(merged.entries.some(entry => /分支提交/.test(entry.message)));
+  assert.ok(merged.entries.some(entry => /主干提交/.test(entry.message)));
+
   await assert.rejects(store.gitHistory('a'.repeat(24)), /不在清单|刷新/);
 
   const plain = path.join(directory, 'plain');

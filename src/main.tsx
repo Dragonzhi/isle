@@ -89,6 +89,7 @@ type TextSize = 'standard' | 'large' | 'xlarge';
 type BoardGroup = { key: string; members: Project[]; multi: boolean; total: number; latest: string; done: boolean };
 const TEXT_SIZE_KEY = 'isle.text-size';
 const PROJECT_VIEW_KEY = 'isle.project-view';
+const GIT_VISIBLE = 12;
 const textSizeOptions: { value: TextSize; label: string; px: string }[] = [
   { value: 'standard', label: '标准', px: '17.5px' },
   { value: 'large', label: '大', px: '19px' },
@@ -141,7 +142,7 @@ function App() {
   const [worktreeNote, setWorktreeNote] = useState('');
   const [workspacePicker, setWorkspacePicker] = useState<{ project: Project; list: Workspaces | null; selected: string[]; names: Record<string, string>; installSkill: boolean; loading: boolean; error: string } | null>(null);
   const [summaryCopy, setSummaryCopy] = useState<string | null>(null);
-  const [git, setGit] = useState<{ id: string; history: GitHistory | null; loading: boolean; error: string }>({ id: '', history: null, loading: false, error: '' });
+  const [git, setGit] = useState<{ id: string; history: GitHistory | null; loading: boolean; error: string; all: boolean }>({ id: '', history: null, loading: false, error: '', all: false });
   const [gitCopy, setGitCopy] = useState<string | null>(null);
   const [skill, setSkill] = useState<{ id: string; status: ProjectSkill | null; loading: boolean; error: string }>({ id: '', status: null, loading: false, error: '' });
   const [criteria, setCriteria] = useState('');
@@ -389,12 +390,12 @@ function App() {
   async function loadGit(project: Project) {
     if (project.state !== 'ok') return;
     const token = ++gitToken.current;
-    setGit({ id: project.id, history: null, loading: true, error: '' });
+    setGit({ id: project.id, history: null, loading: true, error: '', all: false });
     try {
       const history = await request('GET', `/${project.id}/git`) as GitHistory;
-      if (token === gitToken.current) setGit({ id: project.id, history, loading: false, error: '' });
+      if (token === gitToken.current) setGit({ id: project.id, history, loading: false, error: '', all: false });
     } catch (error) {
-      if (token === gitToken.current) setGit({ id: project.id, history: null, loading: false, error: (error as Error).message });
+      if (token === gitToken.current) setGit({ id: project.id, history: null, loading: false, error: (error as Error).message, all: false });
     }
   }
   async function copyGit(project: Project) {
@@ -414,7 +415,7 @@ function App() {
   }
   useEffect(() => {
     if (current && current.state === 'ok') void loadGit(current);
-    else setGit(previous => previous.id ? { id: '', history: null, loading: false, error: '' } : previous);
+    else setGit(previous => previous.id ? { id: '', history: null, loading: false, error: '', all: false } : previous);
   }, [current?.id, current?.state]);
   useEffect(() => {
     if (current && current.state === 'ok') void loadSkill(current);
@@ -679,6 +680,8 @@ function App() {
     </article>;
   }
 
+  const gitEntries = git.id === currentId && git.history?.available ? git.history.entries : [];
+  const gitVisible = git.all ? gitEntries : gitEntries.slice(0, GIT_VISIBLE);
   const now = new Date();
   const date = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()]}`;
   return <div className={styles.app} data-text-size={textSize}>
@@ -824,10 +827,11 @@ function App() {
               {git.loading && <p className={styles.summaryEmpty}>正在读取 git 历史…</p>}
               {!git.loading && git.error && <p className={styles.summaryEmpty}>{git.error}</p>}
               {!git.loading && git.history && !git.history.available && <p className={styles.summaryEmpty}>{git.history.reason || '无法读取 git 历史。'}</p>}
-              {!git.loading && git.history && git.history.available && (git.history.entries.length
-                ? <ul className={styles.gitList}>{git.history.entries.map((entry, index) => <li key={index}><code className={styles.gitHash}>{entry.hash}</code><time className={styles.gitDate}>{entry.date}</time><span className={styles.gitMessage}>{entry.message}</span></li>)}</ul>
+              {!git.loading && git.history && git.history.available && (gitEntries.length
+                ? <ul className={styles.gitList}>{gitVisible.map((entry, index) => <li key={index}><code className={styles.gitHash}>{entry.hash}</code><time className={styles.gitDate}>{entry.date}</time><span className={styles.gitMessage}>{entry.message}</span></li>)}</ul>
                 : <p className={styles.summaryEmpty}>{git.history.reason || '暂无提交。'}</p>)}
-              <p className={styles.gitHint}>只读预览最近的提交；提交与推送由你在终端执行，案屿不主动操作 git、不出网。</p>
+              {!git.loading && gitEntries.length > GIT_VISIBLE && <div className={styles.gitMore}><button className={styles.quietButton} onClick={() => setGit(previous => ({ ...previous, all: !previous.all }))}>{git.all ? `只看最近 ${GIT_VISIBLE} 条` : `显示全部（共 ${gitEntries.length} 条）`}</button></div>}
+              <p className={styles.gitHint}>只读预览最近的非合并提交，合并提交已省略；提交与推送由你在终端执行，案屿不主动操作 git、不出网。</p>
             </div>}
           </section>}
           {current.state === 'ok' && <section className={styles.summaryCard} aria-label="项目 Skill">
