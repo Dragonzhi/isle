@@ -2312,3 +2312,27 @@
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
+
+/* ── 右上角提示 ── */
+.toastRegion {
+  position: fixed;
+  top: 18px;
+  right: 20px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.toast {
+  margin: 0;
+  pointer-events: auto;
+  background: var(--sheet);
+  box-shadow: var(--lp-raise-2);
+  animation: isle-notice var(--motion) var(--ease-out);
+}
+.toast .iconButton { flex: none; }
+@media (max-width: 640px) {
+  .toastRegion { top: 12px; right: 12px; width: calc(100vw - 24px); }
+}

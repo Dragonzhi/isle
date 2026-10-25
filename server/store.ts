@@ -84,7 +84,9 @@ export function directoryInvocation(directory: string, platform: NodeJS.Platform
 function openDirectory(directory: string) {
   return new Promise<void>((resolve, reject) => {
     const { command, args } = directoryInvocation(directory);
-    const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true });
+    // Never pass windowsHide here: on Windows it reaches the GUI process as SW_HIDE, so Explorer
+    // opens the folder window invisible and the user sees nothing. Explorer has no console to hide.
+    const child = spawn(command, args, { detached: true, stdio: 'ignore' });
     child.once('error', () => reject(new AppError('无法调用系统文件管理器，请手动打开这个目录。', 500)));
     child.once('spawn', () => { child.unref(); resolve(); });
   });

@@ -444,6 +444,12 @@ function App() {
     return () => window.removeEventListener('keydown', keyboard);
   }, [navOrder, selected, form, agentDraft, handoffProject, summaryCopy, gitCopy, worktreeOpen, workspacePicker, settingsOpen, moreOpen, currentId, busy, editing, taskEdit]);
   useEffect(() => { setTaskEdit(null); }, [currentId]);
+  // Toasts are transient: successes close quickly, errors stay long enough to read.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), notice.error ? 9000 : 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   async function openWorkspacePicker(project: Project) {
     setWorkspacePicker({ project, list: null, selected: [], names: {}, installSkill: true, loading: true, error: '' });
@@ -730,7 +736,6 @@ function App() {
       </div>
     </header>
     <main className={`${styles.main} ${currentId ? styles.projectPage : ''}`}>
-      {notice && <div className={`${styles.notice} ${notice.error ? styles.noticeError : ''}`} role={notice.error ? 'alert' : 'status'}><span>{notice.message}</span><button aria-label="关闭提示" className={styles.iconButton} onClick={() => setNotice(null)}><Icon name="close" /></button></div>}
       {currentId ? <>
         {current ? <>
           <section className={styles.projectHead} aria-labelledby="project-title">
@@ -1015,6 +1020,12 @@ function App() {
       </div></Modal>;
     })()}
     {gitCopy !== null && <Modal title="复制提交/推送命令" close={() => setGitCopy(null)}><div className={styles.projectForm}><p>浏览器未允许自动复制，请选中下方命令后复制，粘贴到终端自行运行。</p><textarea autoFocus className={styles.handoff} aria-label="提交/推送命令" readOnly value={gitCopy} onFocus={event => event.target.select()} /><div className={styles.dialogActions}><button className={styles.secondary} onClick={() => setGitCopy(null)}>关闭</button></div></div></Modal>}
+    {notice && <div className={styles.toastRegion}>
+      <div className={`${styles.notice} ${styles.toast} ${notice.error ? styles.noticeError : ''}`} role={notice.error ? 'alert' : 'status'}>
+        <span>{notice.message}</span>
+        <button aria-label="关闭提示" className={styles.iconButton} onClick={() => setNotice(null)}><Icon name="close" /></button>
+      </div>
+    </div>}
   </div>;
 }
 
