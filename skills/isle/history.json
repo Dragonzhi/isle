@@ -2,7 +2,8 @@
   "note": "已发布过的 Skill 模板内容哈希（sha256）。只读，随应用发布。改模板时把上一版的哈希追加到对应数组，'安装／补齐' 才能把官方旧版升级到新版；不在表内且与当前模板不同的文件视为用户自有，永不覆盖。",
   "skill": [
     "5d5fbfe23e092809d86c68ec0d2c83440b66b519d7e2726a406c535cff732be1",
-    "6d22ae755f29ff6eaa7ddab4bef117ce109565fc4c53e515915797db993c9b7f"
+    "6d22ae755f29ff6eaa7ddab4bef117ce109565fc4c53e515915797db993c9b7f",
+    "a916212bbd4c1000c4a2445cf6914ecfb0646d6af4f5b15eef9af979d943821f"
   ],
   "metadata": [],
   "entry": []
