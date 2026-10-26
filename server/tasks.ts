@@ -203,7 +203,8 @@ function taskSectionRange(lines: string[], name: string) {
 
 /**
  * Edits one task line without touching the summary or work trail.
- * complete moves the exact line into ## 已完成 and marks it [x]; delete removes it;
+ * complete moves the line into ## 已完成, marks it [x] and appends （YYYY-MM-DD） before
+ * trailing @tags so the completed window can be trimmed by date; delete removes it;
  * edit replaces only the title and keeps checkbox, indentation and trailing @tags.
  */
 export function updateTask(original: Buffer, line: unknown, action: unknown, title?: unknown) {
@@ -238,7 +239,13 @@ export function updateTask(original: Buffer, line: unknown, action: unknown, tit
     if (edited === lines[index]) return original;
     lines[index] = edited;
   } else {
-    const taskLine = `- [x] ${match[2]}${ending || newline}`;
+    // Completion records the local date before trailing @tags; already dated titles are kept.
+    const body = match[2];
+    const tags = body.match(/((?:[ \t]*@[A-Za-z0-9_-]+)+)[ \t]*$/)?.[1] ?? '';
+    const tail = tags && !/^[ \t]/.test(tags) ? ` ${tags}` : tags;
+    const titlePart = body.slice(0, body.length - tags.length);
+    const dated = /（\d{4}-\d{2}-\d{2}）$/.test(titlePart.trimEnd()) ? titlePart : `${titlePart.trimEnd()}（${today()}）`;
+    const taskLine = `- [x] ${dated}${tail}${ending || newline}`;
     lines.splice(index, 1);
     const completed = taskSectionRange(lines, '已完成');
     if (completed) {
