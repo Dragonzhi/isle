@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { GitHistory, Project, ProjectSkill, Snapshot, Task, TaskState, Workspace, Workspaces } from '../shared/types.ts';
+import type { BranchList, GitHistory, Project, ProjectSkill, Snapshot, Task, TaskState, Workspace, Workspaces } from '../shared/types.ts';
 import { closeout, focusTask, handoff, skillTransfer, worktrees } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
 import { orderHistory } from './history.ts';
@@ -141,6 +141,8 @@ function App() {
   const [worktreeBase, setWorktreeBase] = useState('main');
   const [worktreeInput, setWorktreeInput] = useState('');
   const [worktreeNote, setWorktreeNote] = useState('');
+  const [worktreeBranches, setWorktreeBranches] = useState<{ loading: boolean; list: BranchList | null; error: string }>({ loading: false, list: null, error: '' });
+  const [worktreeCustom, setWorktreeCustom] = useState(false);
   const [workspacePicker, setWorkspacePicker] = useState<{ project: Project; list: Workspaces | null; selected: string[]; names: Record<string, string>; installSkill: boolean; loading: boolean; error: string } | null>(null);
   const [summaryCopy, setSummaryCopy] = useState<string | null>(null);
   const [git, setGit] = useState<{ id: string; history: GitHistory | null; loading: boolean; error: string; all: boolean }>({ id: '', history: null, loading: false, error: '', all: false });
@@ -481,11 +483,19 @@ function App() {
     } finally { setBusy(false); }
   }
 
-  function openWorktrees() {
+  function openWorktrees(project: Project) {
     setWorktreeNote('');
     setWorktreeBase('main');
     setWorktreeInput('');
+    setWorktreeCustom(false);
     setWorktreeOpen(true);
+    setWorktreeBranches({ loading: true, list: null, error: '' });
+    void request('GET', `/${project.id}/branches`).then((list: BranchList) => {
+      setWorktreeBranches({ loading: false, list, error: '' });
+      if (list.available && list.current) setWorktreeBase(list.current);
+      else if (list.available && list.branches.length) setWorktreeBase(list.branches[0]);
+      else if (list.available) setWorktreeCustom(true);
+    }).catch((error: Error) => setWorktreeBranches({ loading: false, list: null, error: error.message }));
   }
   async function copyWorktree(project: Project) {
     const dirs = parseWorktreeInput(worktreeInput, baseName(project.path));
@@ -760,7 +770,7 @@ function App() {
             <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={loading || busy} onClick={() => void refresh()}><Icon name="refresh" size={14} />刷新记录</button>
             <span className={styles.utilitySpacer} />
             <button className={`${styles.quietButton} ${styles.utilityButton}`} onClick={() => openForm(current)} disabled={busy || Boolean(editing)}><Icon name="edit" size={14} />修改路径</button>
-            <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={busy || Boolean(editing)} onClick={() => openWorktrees()}><Icon name="branch" size={14} />建工作区</button>
+            <button className={`${styles.quietButton} ${styles.utilityButton}`} disabled={busy || Boolean(editing)} onClick={() => openWorktrees(current!)}><Icon name="branch" size={14} />建工作区</button>
             <button className={`${styles.quietButton} ${styles.utilityButton} ${styles.quietDanger}`} disabled={busy || Boolean(editing)} onClick={() => setRemoveTarget(current)}><Icon name="trash" size={14} />移出看板</button>
           </div>
           <section className={styles.contextCard} aria-label="项目下一步">
@@ -1012,7 +1022,29 @@ function App() {
       return <Modal title="创建工作区" close={() => setWorktreeOpen(false)}><div className={styles.projectForm}>
         <p>生成一段交给项目 Agent 的指令，让它在仓库里创建 git worktree。案屿只生成词、不执行；建好后用「添加已有工作区」加入看板，可顺带装 Skill。</p>
         <p className={styles.skillDescription}>Agent 配置与依赖（如 .agents、.claude、.trae、node_modules）不会跟着 worktree 复制；每个目录还要由你另开一个 Agent 会话，把工作目录切过去。</p>
-        <label>基准分支<input value={worktreeBase} maxLength={120} onChange={event => setWorktreeBase(event.target.value)} placeholder="main" /></label>
+        {(() => {
+          const list = worktreeBranches.list;
+          const selectable = Boolean(list?.available && list.branches.length);
+          return <label>基准分支
+            <span>{worktreeBranches.loading ? '正在读取该项目的本地分支…' : selectable && !worktreeCustom ? '取自该项目已有的本地分支' : '可手动填写'}</span>
+            {worktreeBranches.loading
+              ? <select disabled aria-busy="true"><option>正在读取分支…</option></select>
+              : selectable
+                ? <div className={styles.branchPicker}>
+                    <select value={worktreeCustom ? '__custom__' : worktreeBase} onChange={event => {
+                      const value = event.target.value;
+                      if (value === '__custom__') { setWorktreeBase(''); setWorktreeCustom(true); return; }
+                      setWorktreeBase(value); setWorktreeCustom(false);
+                    }}>
+                      {list!.branches.map(branch => <option key={branch} value={branch}>{branch}{branch === list!.current ? '（当前）' : ''}</option>)}
+                      <option value="__custom__">自定义（手动填写）…</option>
+                    </select>
+                    {worktreeCustom && <input value={worktreeBase} maxLength={120} autoFocus onChange={event => setWorktreeBase(event.target.value)} placeholder="main 或 origin/main" aria-label="自定义基准分支" />}
+                  </div>
+                : <input value={worktreeBase} maxLength={120} onChange={event => setWorktreeBase(event.target.value)} placeholder="main" />}
+          </label>;
+        })()}
+        {!worktreeBranches.loading && (worktreeBranches.error || (worktreeBranches.list && !worktreeBranches.list.available)) && <p className={styles.skillDescription} role="status">{(worktreeBranches.error || worktreeBranches.list?.reason || '').replace(/。$/, '')}。可直接手动填写基准分支。</p>}
         <label>方向 <span>每行一个分支，也可写「分支 | 目录名」</span><textarea className={styles.agentInput} value={worktreeInput} maxLength={2000} onChange={event => setWorktreeInput(event.target.value)} placeholder={worktreePlaceholder} /></label>
         {worktreeNote && <p className={styles.transferNote} role="status">{worktreeNote}</p>}
         <label>预览<textarea readOnly className={styles.handoff} value={prompt} onFocus={event => event.target.select()} /></label>
