@@ -25,6 +25,7 @@ export type GitEntry = { hash: string; date: string; message: string };
 export type GitHistory = { available: boolean; reason?: string; entries: GitEntry[] };
 export type Workspace = { path: string; branch: string; head: string; registered: boolean; name: string; reason?: string };
 export type Workspaces = { available: boolean; reason?: string; entries: Workspace[] };
+export type BranchList = { available: boolean; reason?: string; current: string; branches: string[] };
 export type SkillFile = { path: string; state: 'ready' | 'missing' | 'custom' | 'outdated' | 'error'; message?: string };
 export type ProjectSkill = { state: 'ready' | 'missing' | 'partial' | 'custom' | 'outdated' | 'error'; files: SkillFile[] };
 

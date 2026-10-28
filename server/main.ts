@@ -80,6 +80,8 @@ export async function createApplication(options: { home: string; dev?: boolean; 
           await body(req);
           json(await store.openProjectDirectory(revealRoute[1])); return;
         }
+        const branchRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/branches$/);
+        if (req.method === 'GET' && branchRoute) { json(await store.branches(branchRoute[1])); return; }
         const workspaceRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/workspaces$/);
         if (req.method === 'GET' && workspaceRoute) { json(await store.workspaces(workspaceRoute[1])); return; }
         const taskRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/tasks$/);

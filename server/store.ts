@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { GitHistory, Project, ProjectSkill, SkillFile, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
+import type { BranchList, GitHistory, Project, ProjectSkill, SkillFile, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
 import { hash, parseTasks, template, updateRecord, updateTask } from './tasks.ts';
 
 const runGit = promisify(execFile);
@@ -276,6 +276,36 @@ export class Store {
       if (/not a git repository/i.test(stderr)) return { available: false, reason: '这个目录自身不是 Git 仓库（找不到 .git）。', entries: [] };
       if (/does not have any commits yet/i.test(stderr)) return { available: true, reason: '仓库还没有任何提交。', entries: [] };
       return { available: false, reason: stderr.split('\n')[0] || '无法读取 git 历史。', entries: [] };
+    }
+  }
+
+  // Read-only local branch list for the "create workspace" prompt's base-branch selector.
+  // Runs git on demand only (same boundary as workspaces), never writes, and degrades to a
+  // freely editable value when the directory is not a repo or git is unavailable.
+  async branches(id: string): Promise<BranchList> {
+    const entry = (await this.registry()).entries.find(item => item.id === id);
+    if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+    let directory: string;
+    try { directory = await validateDirectory(entry.path); }
+    catch (error) { return { available: false, reason: (error as Error).message, current: '', branches: [] }; }
+    try { await fs.lstat(path.join(directory, '.git')); }
+    catch (error) {
+      const reason = code(error) === 'ENOENT' ? '这个目录自身不是 Git 仓库（找不到 .git）。' : '无法读取该目录。';
+      return { available: false, reason, current: '', branches: [] };
+    }
+    try {
+      const { stdout } = await runGit('git', ['-c', 'gc.auto=0', '--no-optional-locks', '--no-pager', '-C', directory, 'for-each-ref', '--sort=-committerdate', '--format=%(refname:short)%1f%(HEAD)', 'refs/heads'], { timeout: 6000, maxBuffer: 1024 * 1024, windowsHide: true });
+      const rows = String(stdout).split('\n').map(line => line.replace(/\r$/, '')).filter(Boolean).map(line => {
+        const [name, head] = line.split('\x1f');
+        return { name, current: (head ?? '').trim() === '*' };
+      }).filter(row => row.name);
+      return { available: true, current: rows.find(row => row.current)?.name ?? '', branches: rows.map(row => row.name) };
+    } catch (error) {
+      const failure = error as NodeJS.ErrnoException & { stderr?: string | Buffer; killed?: boolean };
+      if (failure.code === 'ENOENT') return { available: false, reason: '未找到 git，请先安装并加入 PATH。', current: '', branches: [] };
+      if (failure.killed) return { available: false, reason: '读取分支超时。', current: '', branches: [] };
+      if (/not a git repository/i.test(String(failure.stderr ?? ''))) return { available: false, reason: '这个目录自身不是 Git 仓库（找不到 .git）。', current: '', branches: [] };
+      return { available: false, reason: '无法读取分支列表，请检查 Git 版本或目录权限。', current: '', branches: [] };
     }
   }
 

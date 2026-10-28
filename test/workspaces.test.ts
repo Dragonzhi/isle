@@ -47,6 +47,35 @@ test('listing workspaces is read-only and preserves Unicode paths, detached head
   await assert.rejects(store.addWorkspace(id, { path: child, registryHash: added.registryHash }), /已经加入/);
 });
 
+test('branch listing is read-only and reports the checked-out branch', async t => {
+  const { main, child, store, board, id } = await setup(t);
+  const listed = await store.branches(id);
+  assert.equal(listed.available, true);
+  assert.equal(listed.current, 'main');
+  assert.deepEqual([...listed.branches].sort(), ['feat/方向', 'main']);
+  const bytes = await fs.readFile(path.join(main, 'TASKS.md'));
+  const added = await store.addWorkspace(id, { path: child, registryHash: board.registryHash });
+  assert.deepEqual(await fs.readFile(path.join(main, 'TASKS.md')), bytes);
+  const childId = added.projects.find(project => project.path === child)!.id;
+  const childList = await store.branches(childId);
+  assert.equal(childList.available, true);
+  assert.equal(childList.current, 'feat/方向');
+  assert.deepEqual([...childList.branches].sort(), ['feat/方向', 'main']);
+  assert.deepEqual(await fs.readFile(path.join(child, 'TASKS.md')), bytes);
+  await assert.rejects(store.branches('0'.repeat(24)), /不在清单/);
+});
+
+test('branch listing degrades for non-repositories instead of failing', async t => {
+  const { directory, store, board } = await setup(t);
+  const plain = path.join(directory, 'plain'); await fs.mkdir(plain);
+  const added = await store.register({ path: plain, installSkill: false, registryHash: board.registryHash });
+  const listed = await store.branches(added.projects.find(project => project.path === plain)!.id);
+  assert.equal(listed.available, false);
+  assert.equal(listed.current, '');
+  assert.deepEqual(listed.branches, []);
+  assert.match(listed.reason!, /不是 Git 仓库/);
+});
+
 test('workspace import rejects foreign, stale and missing selections; non-repositories degrade', async t => {
   const { directory, child, detached, store, board, id, git } = await setup(t);
   await assert.rejects(store.addWorkspace(id, { path: directory, registryHash: board.registryHash }), /不是该项目/);
@@ -73,8 +102,13 @@ test('workspace endpoints enforce auth, Origin, JSON and current repository memb
   const login = await fetch(launch, { redirect: 'manual' });
   const cookie = login.headers.get('set-cookie')!.split(';')[0];
   const url = origin + `/api/projects/${id}/workspaces`;
+  const branchUrl = origin + `/api/projects/${id}/branches`;
   const headers = { Cookie: cookie, Origin: origin, 'Content-Type': 'application/json' };
   assert.equal((await fetch(url)).status, 401);
+  assert.equal((await fetch(branchUrl)).status, 401);
+  const branches = await (await fetch(branchUrl, { headers: { Cookie: cookie } })).json();
+  assert.equal(branches.available, true);
+  assert.equal(branches.current, 'main');
   assert.equal((await fetch(url, { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
   assert.equal((await fetch(url, { method: 'POST', headers: { ...headers, 'Content-Type': 'text/plain' }, body: '{}' })).status, 415);
   assert.equal((await (await fetch(url, { headers })).json()).entries.length, 3);

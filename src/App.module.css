@@ -307,6 +307,7 @@
 .workspaceCheck span { min-width: 0; overflow-wrap: anywhere; }
 .workspaceCheck small { display: block; margin-top: 5px; font-size: 12px; overflow-wrap: anywhere; color: #6c8060; }
 .projectForm .workspaceName { display: grid; gap: 7px; margin-top: 14px; font-size: 12px; }
+.projectForm .branchPicker { display: grid; gap: 8px; }
 @media (max-width: 760px) {
   .toolbar { align-items: flex-start; gap: 14px; }
   .toolbar > span small { display: block; margin: 6px 0 0; }
