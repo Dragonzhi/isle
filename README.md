@@ -12,6 +12,8 @@
 powershell -NoProfile -ExecutionPolicy Bypass -File tools\create-shortcut.ps1
 ```
 
+快捷方式的图标会先复制到 `%LOCALAPPDATA%\Isle\isle.ico` 再指过去：Windows 解析 .lnk 图标路径时不支持含中文的路径，直接指向仓库里的 `public\isle.ico` 会显示成白纸图标。
+
 也可以手动启动（只起服务、自己打开终端打印的地址）：
 
 ```powershell
