@@ -80,12 +80,17 @@ Agent 没有写回、无法直接写文件，或者你只想补一句时，可�
 
 添加或重新指向项目时，默认勾选“安装项目级案屿 Skill”，可取消。已有项目进入详情页，点击“项目 Skill → 安装 / 补齐”。只在你明确给出的项目目录内补充以下文件：
 
-| 文件 | 用途 |
-| --- | --- |
-| `.agents/skills/isle/SKILL.md` | 通用开工与收工规范，Codex、OpenCode 的发现入口 |
-| `.agents/skills/isle/agents/openai.yaml` | Codex 显示名称与默认指令 |
-| `.claude/skills/isle/SKILL.md` | Claude Code 入口，指向通用规范 |
-| `.trae/skills/isle/SKILL.md` | TRAE 入口，指向通用规范 |
+| 文件 | 用途 | 证据 |
+| --- | --- | --- |
+| `.agents/skills/isle/SKILL.md` | 通用开工与收工规范；Codex、DeepSeek Harness、Trae、ZCode 都会从这个共享目录发现它 | 本机实测 |
+| `.agents/skills/isle/agents/openai.yaml` | Codex 显示名称与默认指令 | 本机实测 |
+| `.claude/skills/isle/SKILL.md` | Claude Code 入口，指向通用规范 | 本机实测 |
+| `.trae/skills/isle/SKILL.md` | Trae 入口，指向通用规范 | 本机实测 |
+| `.zcode/skills/isle/SKILL.md` | ZCode 入口，指向通用规范 | 本机实测 |
+| `AGENTS.md` 里的受管区块 | Codex、Trae、DeepSeek Harness 的项目规则文件；只在 `isle:begin` 与 `isle:end` 之间写入 | 本机实测 |
+| `CLAUDE.md` 里的受管区块 | Claude Code、DeepSeek Harness 的项目规则文件；同上 | 本机实测 |
+
+落点表在 `server/adapters.ts`，每条带证据档：**本机实测**（从已安装的该 Agent 代码或行为里核实过落点，默认安装）、**仅文档**（官方文档记载、本机未实测，默认安装但界面标「未实测」）、**未核实**（只有传闻，默认不安装）。新增一家 Agent 只往表里加一行，不改逻辑。
 
 现在可以直接对当前项目的 Agent 说：
 
@@ -97,9 +102,13 @@ Agent 没有写回、无法直接写文件，或者你只想补一句时，可�
 
 交接弹窗提供“Skill 短指令 / 完整提示词”。安装全部就绪时默认短指令，仍附项目路径、所选署名、开工目标与完成标准，以及直接读取规范的路径；未安装或存在冲突时默认完整提示词。打开、复制时重新读取项目和安装状态；预览后通用规范被修改时阻止复制短指令，提示检查或切换完整提示词。完整提示词可随时使用。
 
-安装会补齐缺失文件，并把**官方旧版**升级到当前版本：内容逐字节比较，等于某个已发布版本（`skills/isle/history.json` 记录的 sha256）时视为官方旧副本、可直接替换；对不上的一律视为用户自有文件，标为冲突并保留，永不覆盖。通用规范冲突时不新增其他入口，避免把 Agent 导向未知规则。补齐失败会显示具体文件状态，项目仍可使用完整提示词；首次安装需要文件系统支持硬链接。安装不改 `AGENTS.md`、`CLAUDE.md`、全局配置或忽略规则，不因为读取或复制就安装；移出看板或重新指向不会删除原项目的 Skill。安装与项目登记不是跨文件事务，登记失败前已创建的文件会保留。
+安装会补齐缺失文件，并把**官方旧版**升级到当前版本：内容逐字节比较，等于某个已发布版本（`skills/isle/history.json` 记录的 sha256）时视为官方旧副本、可直接替换；对不上的一律视为用户自有文件，标为冲突并保留，永不覆盖。通用规范冲突时不新增其他入口，避免把 Agent 导向未知规则。补齐失败会显示具体文件状态，项目仍可使用完整提示词；首次安装需要文件系统支持硬链接。安装不改全局配置或忽略规则，不因为读取或复制就安装；移出看板或重新指向不会删除原项目的 Skill。安装与项目登记不是跨文件事务，登记失败前已创建的文件会保留。
 
-目录依据：[Codex 官方 Skill 文档](https://learn.chatgpt.com/docs/build-skills)、[OpenCode Skills](https://opencode.ai/docs/skills/)、[Claude Code Skills](https://code.claude.com/docs/en/skills)、[TRAE Skills](https://docs.trae.cn/ide_skills)。这实现了发现入口和规范分发，尚未实测四家 Agent 在真实会话中的发现与回写遵从率；可刷新工具的 Skill 列表或重启 Agent。Skill 不会主动启动 Agent，也不会绕过工具权限。
+“项目 Skill → 检查”是干跑：逐条列出会发生什么（新建、追加区块、替换、跳过、冲突、无法处理），不写任何文件。“项目 Skill → 撤除”只撤案屿写进去的字节：官方版本的整文件删除，你改过的同名文件保留；`AGENTS.md` / `CLAUDE.md` 只删受管区块，文件本身保留。父目录（`.agents`、`.claude` 等）和 `TASKS.md` 一律不动。撤除结果逐条显示，不会静默成功。
+
+**写入项目规则文件默认关闭。** 打开后才往已存在的 `AGENTS.md` / `CLAUDE.md` 末尾追加一段受管区块，块外一字不动；用 ``<!-- isle:begin -->`` / ``<!-- isle:end -->`` 标记，只写指针不复制规范正文。规则文件不存在时不创建——不替用户在没有约定的项目里凭空建规则文件。重装只替换块内内容，多份区块收敛为一份，缺少一半标记时不写并报错让你手动检查；块内写入失败会保留原文件。这些文件通常被 git 跟踪，所以开关状态记在本机 `settings.json` 的 `skillMarkers`，按项目保存。
+
+目录依据：[AGENTS.md 约定](https://agents.md)、[Claude Code Skills](https://code.claude.com/docs/en/skills)、[Trae Skills](https://docs.trae.ai/ide/skills)；DeepSeek Harness 的 `.dsh/skills`（rank 100）与 `.agents/skills`（rank 200）、ZCode 的 `.zcode/skills` 与 `.agents/skills` 来自本机安装包内实际代码，没有公开文档页。这实现了发现入口和规范分发，**尚未实测五家 Agent 在真实会话中的发现与回写遵从率**——界面按落点证据档标出「未实测」，不把没验证过的说成已验证。可刷新工具的 Skill 列表或重启 Agent。Skill 不会主动启动 Agent，也不会绕过工具权限。
 
 ## Agent 署名与工作留痕
 
@@ -128,7 +137,9 @@ Agent 没有写回、无法直接写文件，或者你只想补一句时，可�
 
 默认清单在 `%USERPROFILE%\.isle\projects.txt`，格式为 `绝对路径<TAB>可选项目名`，支持空行和 `#` 注释。坏行会给提示，其他项目保留。移出看板只删除清单条目，不删除项目文件。离线项目可重新指向目录；目录确实不存在时（例如已删除的 worktree），离线卡片上也能直接「移出看板」。
 
-全局 Agent 名单保存在同目录 `settings.json` 的 `agents` 数组。保存会保留其他设置字段，页面接口只返回名单及冲突校验值，不返回其他设置内容。设置损坏时不覆盖原文件，项目记录仍可读取；设置在编辑期间被修改时拒绝覆盖，重新打开名单后核对再保存。
+全局 Agent 名单保存在同目录 `settings.json` 的 `agents` 数组；“写入项目规则文件”的开关按项目 id 记在同一文件的 `skillMarkers` 数组。保存会保留其他设置字段，页面接口只返回名单及冲突校验值，不返回其他设置内容。设置损坏时不覆盖原文件，项目记录仍可读取；设置在编辑期间被修改时拒绝覆盖，重新打开名单后核对再保存。
+
+项目 Skill 的撤除只删案屿写入的字节：整文件按版本判定（等于当前模板或某个已发布 sha256 才删），受管区块只删 `isle:begin` 到 `isle:end` 与追加时补的那个空行，块外内容按字节原样保留。父目录不删——`.agents/`、`.claude/` 下可能还有你自己的 Skill；规则文件删完只剩空白时也保留文件。撤除是幂等的，重复执行只报「文件不存在」或「没有可删区块」。
 
 `TASKS.md` 是唯一任务、交接摘要和贡献记录数据源。已有文件的 BOM、换行和未编辑内容保持原样；保存 `next` 或交接摘要仅改相应内容和 `updated`，保留工作留痕，不重排任务。两类编辑共用备份和冲突检测；文件被外部修改时拒绝覆盖，界面保留输入供核对。备份、临时文件准备失败时不替换原文件。
 
