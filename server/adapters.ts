@@ -42,7 +42,7 @@ export const ADAPTERS: Adapter[] = [
     evidence: 'local',
     template: 'skill',
     detect: '.agents',
-    note: '规范正文。Codex 读 .codex/skills 与 .agents/skills；DeepSeek Harness 的项目级根是 .dsh/skills（rank 100）与 .agents/skills（rank 200），都从这里发现',
+    note: '规范正文。DeepSeek Harness 项目级根 rank 200、Trae 兼容只读路径、ZCode workspace agents 根、Codex 仓库技能根候选都包含 .agents/skills',
   },
   {
     agent: 'Codex',
@@ -92,19 +92,22 @@ export const ADAPTERS: Adapter[] = [
     evidence: 'local',
     template: 'marker',
     detect: 'AGENTS.md',
-    note: 'Codex、DeepSeek Harness、ZCode 都会读项目根的 AGENTS.md；只注入受管区块',
+    note: 'Codex、Trae、DeepSeek Harness 都会读项目根的 AGENTS.md；ZCode 只读用户级 ~/.zcode/AGENTS.md，不算项目落点',
   },
   {
     agent: 'CLAUDE.md 通用约定',
     key: 'claude-md',
     path: 'CLAUDE.md',
     kind: 'marker',
-    evidence: 'docs',
+    evidence: 'local',
     template: 'marker',
     detect: 'CLAUDE.md',
-    note: 'Claude Code 读项目根的 CLAUDE.md；只注入受管区块',
+    note: 'Claude Code 与 DeepSeek Harness 都会读项目根的 CLAUDE.md；只注入受管区块',
   },
 ];
+
+// 一次操作的可选项：enabled 是用户显式打开的证据不足落点，marker 是「写入项目规则文件」开关。
+export type SkillOptions = { enabled?: readonly string[]; marker?: boolean };
 
 // 证据不足的落点默认不装；调用方可以显式打开某一条（设置里勾选）。
 export function adapterEnabled(adapter: Adapter, enabled: readonly string[] = []): boolean {
@@ -158,7 +161,7 @@ export function countStates(files: SkillFile[]): SkillCounts {
 // 否则加一条候选适配器就会把已装好的项目从「就绪」打成「部分」。
 const inert: SkillState[] = ['skipped', 'unverified'];
 
-export function skillReport(files: SkillFile[]): ProjectSkill {
+export function skillReport(files: SkillFile[], marker = false): ProjectSkill {
   const active = files.filter(file => !inert.includes(file.state));
   const primary = active[0]?.state;
   const state: SkillState | 'partial' = !active.length ? 'ready'
@@ -167,5 +170,5 @@ export function skillReport(files: SkillFile[]): ProjectSkill {
     : primary === 'custom' ? 'custom'
     : active.some(file => file.state === 'outdated') ? 'outdated'
     : active.every(file => file.state === 'missing') ? 'missing' : 'partial';
-  return { state, files, counts: countStates(files) };
+  return { state, files, counts: countStates(files), marker };
 }

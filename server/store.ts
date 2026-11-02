@@ -4,7 +4,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { BranchList, GitHistory, Project, ProjectSkill, SkillFile, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
+import type { Adapter, SkillOptions } from './adapters.ts';
 import { ADAPTERS, adapterEnabled, loadedAdapters, migrateHistory, skillReport } from './adapters.ts';
+import { installMarker, scanMarker } from './marker.ts';
 import { hash, parseTasks, template, updateRecord, updateTask } from './tasks.ts';
 
 const runGit = promisify(execFile);
@@ -402,17 +404,18 @@ export class Store {
     await this.ensureFile(path.join(directory, 'TASKS.md'), Buffer.from(template(name)));
   }
 
-  async skillStatus(directory: string, history?: Record<string, string[]>, enabled: readonly string[] = []): Promise<ProjectSkill> {
+  async skillStatus(directory: string, history?: Record<string, string[]>, options: SkillOptions = {}): Promise<ProjectSkill> {
     const published = history ? migrateHistory(history) : await skillHistory();
+    const enabled = options.enabled ?? [];
+    const marker = options.marker === true;
     const templates = new Map((await loadedAdapters()).map(item => [item.adapter.key, item.data]));
     const files = await Promise.all(ADAPTERS.map(async adapter => {
       const file: SkillFile = { agent: adapter.agent, path: adapter.path, kind: adapter.kind, evidence: adapter.evidence, note: adapter.note, state: 'missing' };
-      // 受管区块在逐条落盘前先报「未实现」，避免界面把候选落点算成已就绪。
-      if (adapter.kind === 'marker' || !adapterEnabled(adapter, enabled)) {
-        return { ...file, state: 'unverified', message: '该落点尚未启用，未写入' } as SkillFile;
-      }
+      if (adapter.kind === 'marker') return this.markerStatus(directory, adapter, file, marker);
+      // 证据不足的候选落点默认不装，也不参与整体状态判定。
+      if (!adapterEnabled(adapter, enabled)) return { ...file, state: 'unverified', message: '证据不足，默认不安装' } as SkillFile;
       const data = templates.get(adapter.key);
-      if (!data) return { ...file, state: 'unverified', message: '该落点尚未启用，未写入' } as SkillFile;
+      if (!data) return { ...file, state: 'unverified', message: '证据不足，默认不安装' } as SkillFile;
       try {
         const existing = await readRegular(path.join(directory, adapter.path));
         const state = existing.data.equals(data) ? 'ready' : (published[adapter.key] ?? []).includes(digest(existing.data)) ? 'outdated' : 'custom';
@@ -422,14 +425,42 @@ export class Store {
         return { ...file, state: missing ? 'missing' : 'error', message: missing ? undefined : (error as Error).message } as SkillFile;
       }
     }));
-    return skillReport(files);
+    return skillReport(files, marker);
   }
 
-  async ensureSkill(directory: string, history?: Record<string, string[]>, enabled: readonly string[] = []): Promise<ProjectSkill> {
+  // 受管区块的状态只看块本身：块外内容归用户，不比对哈希，也不因为文件被改过就判 custom。
+  private async markerStatus(directory: string, adapter: Adapter, file: SkillFile, enabled: boolean): Promise<SkillFile> {
+    if (!enabled) return { ...file, state: 'skipped', message: '未开启写入项目规则文件' };
+    try {
+      const existing = await readRegular(path.join(directory, adapter.path));
+      const scan = scanMarker(existing.data);
+      if (scan.broken) return { ...file, state: 'error', message: '标记不完整，请手动检查后再试' };
+      if (!scan.complete) return { ...file, state: 'missing', message: '尚未写入受管区块' } as SkillFile;
+      return { ...file, state: 'ready', message: scan.complete > 1 ? `有 ${scan.complete} 个受管区块，补齐时会收敛为一份` : undefined };
+    } catch (error) {
+      if (code(error) === 'ENOENT') return { ...file, state: 'skipped', message: '规则文件不存在，不替你新建' };
+      return { ...file, state: 'error', message: (error as Error).message };
+    }
+  }
+
+  // 写前再读一次并比对摘要：用户很可能正开着编辑器改 AGENTS.md。
+  async publishGuarded(file: string, data: Buffer, expected: string) {
+    await this.atomic(file, data, async () => {
+      if (digest((await readRegular(file)).data) !== expected) throw new AppError('文件在写入期间被外部修改，已停止写入，请刷新后核对。', 409);
+    });
+  }
+
+  async ensureSkill(directory: string, history?: Record<string, string[]>, options: SkillOptions = {}): Promise<ProjectSkill> {
     const failures = new Map<string, string>();
     const published = history ? migrateHistory(history) : await skillHistory();
+    const enabled = options.enabled ?? [];
+    const marker = options.marker === true;
     for (const { adapter, data } of await loadedAdapters()) {
-      // marker 的写入实现留到受管区块那一步；unverified 落点默认不动。
+      if (adapter.kind === 'marker') {
+        if (marker) await this.installMarkerFile(directory, adapter, failures);
+        continue;
+      }
+      // 证据不足的候选落点默认不装。
       if (!data || !adapterEnabled(adapter, enabled)) continue;
       const file = path.join(directory, adapter.path);
       try {
@@ -447,15 +478,57 @@ export class Store {
         if (adapter.template === 'skill') break;
       }
     }
-    const result = await this.skillStatus(directory, published, enabled);
-    return skillReport(result.files.map(file => failures.has(file.path) ? { ...file, state: 'error', message: failures.get(file.path) } : file));
+    const result = await this.skillStatus(directory, published, options);
+    return skillReport(result.files.map(file => failures.has(file.path) ? { ...file, state: 'error', message: failures.get(file.path) } : file), marker);
+  }
+
+  // 规则文件不存在就不写：不替用户在没有约定的项目里凭空建 AGENTS.md / CLAUDE.md。
+  private async installMarkerFile(directory: string, adapter: Adapter, failures: Map<string, string>) {
+    const file = path.join(directory, adapter.path);
+    try {
+      await noLinks(file);
+      const existing = await readRegular(file).catch(error => { if (code(error) === 'ENOENT') return null; throw error; });
+      if (!existing) return;
+      const result = installMarker(existing.data);
+      if ('error' in result) throw new AppError(result.error, 422);
+      if (result.data.equals(existing.data)) return;
+      await this.publishGuarded(file, result.data, digest(existing.data));
+    } catch (error) {
+      failures.set(adapter.path, (error as Error).message);
+    }
+  }
+
+  // 开关状态记在 settings.json 的 skillMarkers 里，按项目 id 保存；读不到就当关着。
+  async markerProjects(): Promise<string[]> {
+    const settings = await this.settings().catch(() => null);
+    const value = settings?.value.skillMarkers;
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  }
+
+  async setProjectMarker(id: string, enable: unknown) {
+    if (typeof enable !== 'boolean') throw new AppError('开关须为布尔值。');
+    return this.write(async () => {
+      const entry = (await this.registry()).entries.find(item => item.id === id);
+      if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+      await validateDirectory(entry.path);
+      const settings = await this.settings();
+      const ids = new Set(await this.markerProjects());
+      if (enable) ids.add(id); else ids.delete(id);
+      const saved = { ...settings.value, skillMarkers: [...ids] };
+      await this.atomic(this.settingsFile, Buffer.from(JSON.stringify(saved, null, 2) + '\n'), async () => {
+        if (hash((await this.settings()).data) !== hash(settings.data)) throw new AppError('设置已变化，请重新打开后再试。', 409);
+      });
+      // 打开开关就顺手补齐，关闭只停止后续写入，已有区块留给「撤除」处理。
+      return enable ? this.ensureSkill(entry.path, undefined, { marker: true }) : this.skillStatus(entry.path, undefined, { marker: false });
+    });
   }
 
   async projectSkill(id: string) {
     const entry = (await this.registry()).entries.find(item => item.id === id);
     if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
     await validateDirectory(entry.path);
-    return this.skillStatus(entry.path);
+    const marker = (await this.markerProjects()).includes(id);
+    return this.skillStatus(entry.path, undefined, { marker });
   }
 
   async installProjectSkill(id: string) {
@@ -463,7 +536,8 @@ export class Store {
       const entry = (await this.registry()).entries.find(item => item.id === id);
       if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
       await validateDirectory(entry.path);
-      return this.ensureSkill(entry.path);
+      const marker = (await this.markerProjects()).includes(id);
+      return this.ensureSkill(entry.path, undefined, { marker });
     });
   }
 
