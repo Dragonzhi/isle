@@ -108,7 +108,15 @@ function readProjectView(): ProjectView {
 function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
   return format === 'skill' ? skillTransfer(project, mode, author, criteria, goal) : mode === 'close' ? closeout(project, author) : handoff(project, criteria, goal, author);
 }
-const skillLabels = { ready: '已就绪', missing: '尚未安装', partial: '部分入口待补齐', outdated: '有官方新版本，可升级', custom: '已有自定义同名 Skill', error: '无法安装或读取' };
+const skillLabels = { ready: '已就绪', missing: '尚未安装', partial: '部分入口待补齐', outdated: '有官方新版本，可升级', custom: '已有自定义同名 Skill', error: '无法安装或读取', skipped: '按设置跳过', unverified: '尚未启用' };
+const skillFileLabels: Record<string, string> = { ready: '就绪', missing: '缺失', outdated: '官方旧版，可升级', custom: '已有不同内容，未覆盖', error: '无法访问', skipped: '按设置跳过', unverified: '未启用' };
+// 证据档直接标在界面上：docs 是「未实测」，unverified 是「未启用」，别让人以为都实测过。
+const evidenceLabels: Record<string, string> = { local: '', docs: '未实测', unverified: '未启用' };
+function skillReady(status: ProjectSkill | null) {
+  if (!status) return '';
+  const counted = status.files.filter(file => file.state !== 'skipped' && file.state !== 'unverified').length;
+  return `${status.counts.ready}/${counted} 就绪`;
+}
 function App() {
   const [data, setData] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -885,9 +893,9 @@ function App() {
           </section>}
           {current.state === 'ok' && <section className={styles.summaryCard} aria-label="项目 Skill">
             <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void (skill.status?.state === 'ready' ? loadSkill(current) : installProjectSkill(current))}><Icon name="refresh" size={14} />{skill.status?.state === 'ready' ? '重新检查' : skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
-            <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}{skill.status?.state === 'ready' ? '。' : '；就绪后'}可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
-            <p className={styles.skillDescription}>提供 Codex、OpenCode、Claude Code 和 TRAE 的项目入口。补充缺失文件，并把官方旧版升级到当前版本；官方旧版以外的同名文件（含你改过的）保留不覆盖。</p>
-            {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{({ ready: '就绪', missing: '缺失', outdated: '官方旧版，可升级', custom: '已有不同内容，未覆盖', error: '无法访问' })[file.state]}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
+            <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}{skill.status ? `（${skillReady(skill.status)}）` : ''}{skill.status?.state === 'ready' ? '。' : '；就绪后'}可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
+            <p className={styles.skillDescription}>提供 {skill.status ? [...new Set(skill.status.files.map(file => file.agent))].join('、') : '各'} 的项目落点。补充缺失文件，并把官方旧版升级到当前版本；官方旧版以外的同名文件（含你改过的）保留不覆盖。</p>
+            {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{file.agent} · {skillFileLabels[file.state]}{evidenceLabels[file.evidence] ? `（${evidenceLabels[file.evidence]}）` : ''}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
           </section>}
           <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><span>案屿只读取记录、生成文字，不执行项目命令</span></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}

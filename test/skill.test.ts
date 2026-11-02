@@ -31,13 +31,15 @@ test('import installs project skill and native entrypoints without changing exis
   const snapshot = await store.register({ path: project, registryHash: (await store.snapshot()).registryHash });
   const status = await store.projectSkill(snapshot.projects[0].id);
   assert.equal(status.state, 'ready');
-  assert.equal(status.files.length, 4);
+  const { ADAPTERS } = await import('../server/adapters.ts');
+  assert.equal(status.files.length, ADAPTERS.length);
+  assert.equal(status.counts.ready + status.counts.unverified, ADAPTERS.length);
   assert.deepEqual(await fs.readFile(file), original);
   assert.equal(await fs.readFile(path.join(project, 'AGENTS.md'), 'utf8'), '原有规则\n');
   assert.equal(await fs.readFile(path.join(project, 'CLAUDE.md'), 'utf8'), '其他团队约定\n');
   const canonical = await fs.readFile(path.join(project, status.files[0].path));
   assert.deepEqual(canonical, await fs.readFile(new URL('../skills/isle/SKILL.md', import.meta.url)));
-  for (const item of status.files.filter(item => item.path.startsWith('.claude/') || item.path.startsWith('.trae/'))) {
+  for (const item of status.files.filter(item => item.kind === 'entry')) {
     const entry = await fs.readFile(path.join(project, item.path), 'utf8');
     const link = entry.match(/\]\(([^)]+)\)/)![1];
     assert.equal(path.resolve(path.dirname(path.join(project, item.path)), link), path.join(project, status.files[0].path));
@@ -165,14 +167,18 @@ test('published older versions are upgraded while user-edited files are never ov
 
 test('published history is a valid read-only hash table that never lists the current template', async () => {
   const raw = JSON.parse(await fs.readFile(new URL('../skills/isle/history.json', import.meta.url), 'utf8')) as Record<string, unknown>;
-  for (const key of ['skill', 'metadata', 'entry']) {
-    assert.ok(Array.isArray(raw[key]), key + ' must be an array');
-    const list = raw[key] as unknown[];
-    for (const item of list) assert.match(String(item), /^[a-f0-9]{64}$/);
-    assert.equal(new Set(list).size, list.length, key + ' has duplicates');
+  const { ADAPTERS } = await import('../server/adapters.ts');
+  // 键与适配器一一对应：多一条少一条都会让升级判定错位。
+  for (const adapter of ADAPTERS) {
+    const list = raw[adapter.key];
+    assert.ok(Array.isArray(list), adapter.key + ' must be an array');
+    for (const item of list as unknown[]) assert.match(String(item), /^[a-f0-9]{64}$/);
+    assert.equal(new Set(list as unknown[]).size, (list as unknown[]).length, adapter.key + ' has duplicates');
   }
+  // 旧键已经迁移过，不该再写回文件；读取侧仍兼容，但文件本身只留新键。
+  for (const legacy of ['skill', 'metadata', 'entry']) assert.equal(raw[legacy], undefined, legacy + ' must be migrated away');
   const crypto = await import('node:crypto');
   const current = crypto.createHash('sha256').update(await fs.readFile(new URL('../skills/isle/SKILL.md', import.meta.url))).digest('hex');
-  assert.ok(!(raw.skill as string[]).includes(current));
+  assert.ok(!((raw['agents-skill'] ?? []) as string[]).includes(current));
 });
 
