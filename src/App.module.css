@@ -2337,3 +2337,115 @@
 @media (max-width: 640px) {
   .toastRegion { top: 12px; right: 12px; width: calc(100vw - 24px); }
 }
+
+/* ── 项目 Skill 面板：动作成组、开关成条、落点一张表 ── */
+/* 三个动作靠右收成一组，别再被 space-between 拉开成整行。 */
+.skillActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.skillStateLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0 0 6px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.8;
+}
+.skillStateLine strong { font-weight: 600; color: var(--ink); }
+.skillDot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--offline);
+}
+.skillDotReady { background: var(--sage); }
+.skillDotMissing, .skillDotOutdated, .skillDotPartial { background: var(--olive); }
+.skillDotCustom, .skillDotError { background: var(--rust); }
+.skillCount {
+  padding: 0 7px;
+  border: 1px solid var(--line-dark);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-2);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.skillHint { color: var(--muted); }
+
+/* 开关：压凹的纸槽，勾选后压入墨色边框。 */
+.skillToggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-dark);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-2);
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+}
+.skillToggle:hover { border-color: var(--ink); }
+.skillToggle:has(input:checked) { border-color: var(--sage-dark); background: #f0f4e8; }
+.skillToggleBody { display: block; min-width: 0; }
+.skillToggleTitle { display: block; color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.6; }
+.skillToggle small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+
+/* 落点一张表：状态与「检查」结果并排，不再重复列一遍路径。 */
+.skillTable { margin-top: 4px; border-top: 1px solid var(--line-dark); }
+.skillRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 190px 116px;
+  align-items: center;
+  gap: 3px 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.skillRowPlan { grid-template-columns: minmax(0, 1fr) 190px 116px 84px; }
+.skillRowHead { padding: 5px 0; color: var(--muted); font-size: 12px; letter-spacing: .02em; }
+.skillPath { color: var(--ink-2); font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.skillAgent { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.skillBadge {
+  justify-self: start;
+  padding: 0 7px;
+  border: 1px solid var(--line-dark);
+  /* 压在 --sheet 上而不是纸底：olive 在纸底只有 4.43:1，会掉到 AA 以下。 */
+  background: var(--sheet);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.9;
+  white-space: nowrap;
+}
+/* 颜色只是辅助，状态始终有文字；色值全部取自既有 token。 */
+.skillBadgeReady { border-color: var(--sage); color: var(--sage-dark); }
+.skillBadgeMissing, .skillBadgeOutdated { border-color: var(--olive); color: var(--olive); }
+.skillBadgeCustom, .skillBadgeError { border-color: var(--rust); color: var(--rust); }
+.skillBadgeSkipped, .skillBadgeUnverified { border-color: var(--line-dark); color: var(--muted); }
+.skillPlanCell { color: var(--muted); font-size: 12px; }
+.skillNote { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 760px) {
+  .summaryHeading .skillActions { width: 100%; margin-left: 0; }
+  .skillActions .quietButton { min-height: 44px; }
+  /* 极窄屏：两个动作并排、主操作独占一行，避免三颗按钮参差换行。 */
+  @media (max-width: 380px) {
+    .skillActions { display: grid; grid-template-columns: 1fr 1fr; }
+    .skillActions .quietButton:last-child { grid-column: 1 / -1; }
+  }
+  .skillRow, .skillRowPlan { grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; }
+  .skillRowHead { display: none; }
+  .skillPath { grid-column: 1 / -1; }
+  .skillAgent { grid-column: 1 / -1; }
+  .skillBadge { grid-column: 1; justify-self: start; }
+  .skillPlanCell { grid-column: 2; justify-self: end; }
+}
+

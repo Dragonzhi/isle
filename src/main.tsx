@@ -113,10 +113,30 @@ const skillFileLabels: Record<string, string> = { ready: '就绪', missing: '缺
 // 证据档直接标在界面上：docs 是「未实测」，unverified 是「未启用」，别让人以为都实测过。
 const evidenceLabels: Record<string, string> = { local: '', docs: '未实测', unverified: '未启用' };
 const actionLabels: Record<string, string> = { create: '新建', append: '追加区块', replace: '替换', remove: '删除', skip: '跳过', conflict: '不动（用户自有）', error: '无法处理' };
+// 状态既给文字也给颜色，不靠颜色单独表意。
+const skillBadgeTone: Record<string, string> = {
+  ready: styles.skillBadgeReady,
+  missing: styles.skillBadgeMissing,
+  outdated: styles.skillBadgeOutdated,
+  custom: styles.skillBadgeCustom,
+  error: styles.skillBadgeError,
+  skipped: styles.skillBadgeSkipped,
+  unverified: styles.skillBadgeUnverified,
+};
+const skillDotTone: Record<string, string> = {
+  ready: styles.skillDotReady,
+  missing: styles.skillDotMissing,
+  outdated: styles.skillDotOutdated,
+  partial: styles.skillDotPartial,
+  custom: styles.skillDotCustom,
+  error: styles.skillDotError,
+  skipped: styles.skillDotSkipped,
+  unverified: styles.skillDotUnverified,
+};
 function skillReady(status: ProjectSkill | null) {
   if (!status) return '';
   const counted = status.files.filter(file => file.state !== 'skipped' && file.state !== 'unverified').length;
-  return `${status.counts.ready}/${counted} 就绪`;
+  return `${status.counts.ready}/${counted}`;
 }
 function App() {
   const [data, setData] = useState<Snapshot | null>(null);
@@ -242,6 +262,16 @@ function App() {
       : '界面按日期倒序显示；TASKS.md 原文保留原顺序。'
     : '按文件追加顺序显示。';
   const currentNext = formatNext(current?.next ?? '');
+  // 项目 Skill 面板的派生值：检查与撤除结果只对当前项目显示，避免串项目。
+  const skillPlanShown = current && skillPlan.id === current.id ? skillPlan : null;
+  const skillRemovalShown = current && removal.id === current.id ? removal.result : null;
+  const skillChecking = Boolean(skillPlanShown?.loading || skillPlanShown?.plan || skillPlanShown?.error);
+  const skillPlanByPath = new Map((skillPlanShown?.plan?.entries ?? []).map(entry => [entry.path, entry]));
+  const skillRowClass = `${styles.skillRow}${skillChecking ? ' ' + styles.skillRowPlan : ''}`;
+  // 「Codex / DeepSeek Harness」这类共用落点拆开去重，别在文案里重复同一家。
+  const skillAgents = skill.status
+    ? [...new Set(skill.status.files.filter(file => file.kind !== 'marker').flatMap(file => file.agent.split(' / ')))].join('、')
+    : '各 Agent';
   useEffect(() => {
     setOpenSections({ summary: false, history: false, git: false });
     setMoreOpen(false);
@@ -932,18 +962,44 @@ function App() {
             </div>}
           </section>}
           {current.state === 'ok' && <section className={styles.summaryCard} aria-label="项目 Skill">
-            <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void loadSkillPlan(current)}><Icon name="list" size={14} />检查</button><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => setSkillRemove(current)}><Icon name="trash" size={14} />撤除</button><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void (skill.status?.state === 'ready' ? loadSkill(current) : installProjectSkill(current))}><Icon name="refresh" size={14} />{skill.status?.state === 'ready' ? '重新检查' : skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
-            <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}{skill.status ? `（${skillReady(skill.status)}）` : ''}{skill.status?.state === 'ready' ? '。' : '；就绪后'}可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
-            <p className={styles.skillDescription}>提供 {skill.status ? [...new Set(skill.status.files.map(file => file.agent))].join('、') : '各'} 的项目落点。补充缺失文件，并把官方旧版升级到当前版本；官方旧版以外的同名文件（含你改过的）保留不覆盖。</p>
-            <label className={styles.skillInstallLabel}><input type="checkbox" checked={skill.status?.marker ?? false} disabled={busy || skill.loading || skill.id !== current.id} onChange={event => void toggleProjectMarker(current, event.target.checked)} /><span>写入项目规则文件（AGENTS.md / CLAUDE.md）<small>只注入案屿的受管区块，块外一字不动；会修改被 git 跟踪的文件，默认关闭。规则文件不存在时不新建。</small></span></label>
-            {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{file.agent} · {skillFileLabels[file.state]}{evidenceLabels[file.evidence] ? `（${evidenceLabels[file.evidence]}）` : ''}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
-            {skillPlan.id === current.id && (skillPlan.loading || skillPlan.error || skillPlan.plan) && <div className={styles.skillFiles}>
-              <p className={styles.skillDescription}>{skillPlan.loading ? '正在检查将要发生的动作…' : skillPlan.error || `检查结果：新建 ${skillPlan.plan?.counts.create ?? 0}、追加 ${skillPlan.plan?.counts.append ?? 0}、替换 ${skillPlan.plan?.counts.replace ?? 0}、跳过 ${skillPlan.plan?.counts.skip ?? 0}、冲突 ${skillPlan.plan?.counts.conflict ?? 0}、错误 ${skillPlan.plan?.counts.error ?? 0}。检查不会写任何文件。`}</p>
-              {skillPlan.plan && <ul>{skillPlan.plan.entries.map(entry => <li key={entry.key}><code>{entry.path}</code><span>{actionLabels[entry.action]} · {entry.reason}</span></li>)}</ul>}
+            <div className={styles.summaryHeading}>
+              <h2>项目 Skill</h2>
+              <div className={styles.skillActions}>
+                <button className={styles.quietButton} aria-pressed={skillChecking} disabled={busy || skill.loading} onClick={() => void (skillChecking ? setSkillPlan({ id: '', plan: null, loading: false, error: '' }) : loadSkillPlan(current))}><Icon name="list" size={14} />{skillChecking ? '收起检查' : '检查'}</button>
+                <button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => setSkillRemove(current)}><Icon name="trash" size={14} />撤除</button>
+                <button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void (skill.status?.state === 'ready' ? loadSkill(current) : installProjectSkill(current))}><Icon name="refresh" size={14} />{skill.status?.state === 'ready' ? '重新检查' : skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button>
+              </div>
+            </div>
+            <p className={styles.skillStateLine}>
+              <span className={`${styles.skillDot} ${skillDotTone[skill.status?.state ?? ''] ?? ''}`} aria-hidden="true" />
+              <strong>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}</strong>
+              {skill.status && <span className={styles.skillCount} title={`${skill.status.counts.ready} 个落点已就绪，共 ${skill.status.files.filter(file => file.state !== 'skipped' && file.state !== 'unverified').length} 个参与安装`}>{skillReady(skill.status)}</span>}
+              {skill.status?.state === 'ready' && <span className={styles.skillHint}>可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</span>}
+            </p>
+            <p className={styles.skillDescription}>为 {skillAgents} 写入项目落点：补齐缺失、把官方旧版升级到当前版本；对不上的同名文件视为你自有，永不覆盖。</p>
+            <label className={styles.skillToggle}>
+              <input type="checkbox" checked={skill.status?.marker ?? false} disabled={busy || skill.loading || skill.id !== current.id} onChange={event => void toggleProjectMarker(current, event.target.checked)} />
+              <span className={styles.skillToggleBody}>
+                <span className={styles.skillToggleTitle}>写入项目规则文件（AGENTS.md / CLAUDE.md）</span>
+                <small>只注入案屿的受管区块，块外一字不动；会修改被 git 跟踪的文件，默认关闭。规则文件不存在时不新建。</small>
+              </span>
+            </label>
+            {skillPlanShown?.loading && <p className={styles.skillDescription} role="status">正在检查将要发生的动作…</p>}
+            {skillPlanShown?.error && <p className={styles.skillDescription} role="status">{skillPlanShown.error}</p>}
+            {skillPlanShown?.plan && <p className={styles.skillDescription} role="status">检查完成：新建 {skillPlanShown.plan.counts.create} · 追加 {skillPlanShown.plan.counts.append} · 替换 {skillPlanShown.plan.counts.replace} · 跳过 {skillPlanShown.plan.counts.skip} · 冲突 {skillPlanShown.plan.counts.conflict} · 无法处理 {skillPlanShown.plan.counts.error}。没有写任何文件。</p>}
+            {skill.id === current.id && skill.status && <div className={styles.skillTable}>
+              <div className={`${skillRowClass} ${styles.skillRowHead}`}><span>落点</span><span>Agent</span><span>状态</span>{skillChecking && <span>检查</span>}</div>
+              {skill.status.files.map(file => <div className={skillRowClass} key={file.path}>
+                <code className={styles.skillPath}>{file.path}</code>
+                <span className={styles.skillAgent}>{file.agent}</span>
+                <span className={`${styles.skillBadge} ${skillBadgeTone[file.state] ?? ''}`}>{skillFileLabels[file.state]}{evidenceLabels[file.evidence] ? ` · ${evidenceLabels[file.evidence]}` : ''}</span>
+                {skillChecking && <span className={styles.skillPlanCell}>{skillPlanByPath.get(file.path) ? actionLabels[skillPlanByPath.get(file.path)!.action] : '—'}</span>}
+                {file.message && <span className={styles.skillNote}>{file.message}</span>}
+              </div>)}
             </div>}
-            {removal.id === current.id && removal.result && <div className={styles.skillFiles}>
-              <p className={styles.skillDescription}>撤除结果：删除 {removal.result.counts.removed} 项、保留 {removal.result.counts.kept} 项、跳过 {removal.result.counts.skipped} 项。父目录与 TASKS.md 未被改动。</p>
-              <ul>{removal.result.entries.map(entry => <li key={entry.key}><code>{entry.path}</code><span>{entry.action === 'removed' ? '已删除' : entry.action === 'kept' ? '已保留' : '已跳过'} · {entry.reason}</span></li>)}</ul>
+            {skillRemovalShown && <div className={styles.skillTable}>
+              <p className={styles.skillDescription}>撤除完成：删除 {skillRemovalShown.counts.removed} 项、保留 {skillRemovalShown.counts.kept} 项、跳过 {skillRemovalShown.counts.skipped} 项。父目录与 TASKS.md 未改动。</p>
+              {skillRemovalShown.entries.filter(entry => entry.action !== 'removed').map(entry => <div className={styles.skillRow} key={entry.key}><code className={styles.skillPath}>{entry.path}</code><span className={styles.skillAgent}>{entry.action === 'kept' ? '已保留' : '已跳过'}</span><span className={styles.skillNote}>{entry.reason}</span></div>)}
             </div>}
           </section>}
           <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><span>案屿只读取记录、生成文字，不执行项目命令</span></footer>
