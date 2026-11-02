@@ -71,6 +71,8 @@ export async function createApplication(options: { home: string; dev?: boolean; 
         if (req.method === 'GET' && url.pathname === '/api/projects') { json(await store.snapshot()); return; }
         const gitRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/git$/);
         if (req.method === 'GET' && gitRoute) { json(await store.gitHistory(gitRoute[1])); return; }
+        const skillPlanRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/skill\/plan$/);
+        if (req.method === 'GET' && skillPlanRoute) { json(await store.planProjectSkill(skillPlanRoute[1])); return; }
         const skillRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/skill$/);
         if (req.method === 'GET' && skillRoute) { json(await store.projectSkill(skillRoute[1])); return; }
         const revealRoute = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})\/reveal$/);
@@ -92,6 +94,7 @@ export async function createApplication(options: { home: string; dev?: boolean; 
         if (req.method === 'POST' && workspaceRoute) { json(await store.addWorkspace(workspaceRoute[1], { path: input.path, name: input.name, registryHash: input.registryHash, installSkill: input.installSkill }), 201); return; }
         if (req.method === 'POST' && skillRoute) { json(await store.installProjectSkill(skillRoute[1])); return; }
         if (req.method === 'PATCH' && skillRoute) { json(await store.setProjectMarker(skillRoute[1], input.marker)); return; }
+        if (req.method === 'DELETE' && skillRoute) { json(await store.removeProjectSkill(skillRoute[1])); return; }
         if (req.method === 'PATCH' && url.pathname === '/api/agents') { json(await store.saveAgents(input.agents, input.settingsHash)); return; }
         if (req.method === 'POST' && url.pathname === '/api/projects') { json(await store.register({ path: input.path, name: input.name, registryHash: input.registryHash, installSkill: input.installSkill }), 201); return; }
         const match = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})(\/repoint)?$/);

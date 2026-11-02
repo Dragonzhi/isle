@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { BranchList, GitHistory, Project, ProjectSkill, Snapshot, Task, TaskState, Workspace, Workspaces } from '../shared/types.ts';
+import type { BranchList, GitHistory, Project, ProjectSkill, SkillPlan, SkillRemovalResult, Snapshot, Task, TaskState, Workspace, Workspaces } from '../shared/types.ts';
 import { closeout, focusTask, handoff, skillTransfer, worktrees } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
 import { orderHistory } from './history.ts';
@@ -112,6 +112,7 @@ const skillLabels = { ready: '已就绪', missing: '尚未安装', partial: '部
 const skillFileLabels: Record<string, string> = { ready: '就绪', missing: '缺失', outdated: '官方旧版，可升级', custom: '已有不同内容，未覆盖', error: '无法访问', skipped: '按设置跳过', unverified: '未启用' };
 // 证据档直接标在界面上：docs 是「未实测」，unverified 是「未启用」，别让人以为都实测过。
 const evidenceLabels: Record<string, string> = { local: '', docs: '未实测', unverified: '未启用' };
+const actionLabels: Record<string, string> = { create: '新建', append: '追加区块', replace: '替换', remove: '删除', skip: '跳过', conflict: '不动（用户自有）', error: '无法处理' };
 function skillReady(status: ProjectSkill | null) {
   if (!status) return '';
   const counted = status.files.filter(file => file.state !== 'skipped' && file.state !== 'unverified').length;
@@ -156,6 +157,9 @@ function App() {
   const [git, setGit] = useState<{ id: string; history: GitHistory | null; loading: boolean; error: string; all: boolean }>({ id: '', history: null, loading: false, error: '', all: false });
   const [gitCopy, setGitCopy] = useState<string | null>(null);
   const [skill, setSkill] = useState<{ id: string; status: ProjectSkill | null; loading: boolean; error: string }>({ id: '', status: null, loading: false, error: '' });
+  const [skillPlan, setSkillPlan] = useState<{ id: string; plan: SkillPlan | null; loading: boolean; error: string }>({ id: '', plan: null, loading: false, error: '' });
+  const [skillRemove, setSkillRemove] = useState<Project | null>(null);
+  const [removal, setRemoval] = useState<{ id: string; result: SkillRemovalResult | null }>({ id: '', result: null });
   const [criteria, setCriteria] = useState('');
   const [authors, setAuthors] = useState({ start: '', close: '' });
   const [agentDraft, setAgentDraft] = useState<{ value: string; hash: string | null } | null>(null);
@@ -390,6 +394,31 @@ function App() {
       const status = await request('POST', `/${project.id}/skill`, {}) as ProjectSkill;
       if (token === skillToken.current) setSkill({ id: project.id, status, loading: false, error: '' });
       setNotice({ message: status.state === 'ready' ? '项目 Skill 已就绪，可以复制短指令。' : status.state === 'outdated' ? '仍有官方旧版未能升级，请重试或查看各入口状态。' : '未覆盖已有文件；请查看各入口的状态并核对。', error: status.state !== 'ready' });
+    } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
+    finally { setBusy(false); }
+  }
+  async function loadSkillPlan(project: Project) {
+    const token = ++skillToken.current;
+    setSkillPlan({ id: project.id, plan: null, loading: true, error: '' });
+    try {
+      const plan = await request('GET', `/${project.id}/skill/plan`) as SkillPlan;
+      if (token === skillToken.current) setSkillPlan({ id: project.id, plan, loading: false, error: '' });
+    } catch (error) {
+      if (token === skillToken.current) setSkillPlan({ id: project.id, plan: null, loading: false, error: (error as Error).message });
+    }
+  }
+  async function removeProjectSkill(project: Project) {
+    if (busy) return;
+    setBusy(true);
+    const token = ++skillToken.current;
+    try {
+      const result = await request('DELETE', `/${project.id}/skill`, {}) as SkillRemovalResult;
+      setSkillRemove(null);
+      setRemoval({ id: project.id, result });
+      setSkillPlan({ id: '', plan: null, loading: false, error: '' });
+      const status = await request('GET', `/${project.id}/skill`) as ProjectSkill;
+      if (token === skillToken.current) setSkill({ id: project.id, status, loading: false, error: '' });
+      setNotice({ message: `撤除完成：删除 ${result.counts.removed} 项，保留 ${result.counts.kept} 项，跳过 ${result.counts.skipped} 项。逐条结果见卡片下方。` });
     } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
     finally { setBusy(false); }
   }
@@ -903,11 +932,19 @@ function App() {
             </div>}
           </section>}
           {current.state === 'ok' && <section className={styles.summaryCard} aria-label="项目 Skill">
-            <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void (skill.status?.state === 'ready' ? loadSkill(current) : installProjectSkill(current))}><Icon name="refresh" size={14} />{skill.status?.state === 'ready' ? '重新检查' : skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
+            <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void loadSkillPlan(current)}><Icon name="list" size={14} />检查</button><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => setSkillRemove(current)}><Icon name="trash" size={14} />撤除</button><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void (skill.status?.state === 'ready' ? loadSkill(current) : installProjectSkill(current))}><Icon name="refresh" size={14} />{skill.status?.state === 'ready' ? '重新检查' : skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
             <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}{skill.status ? `（${skillReady(skill.status)}）` : ''}{skill.status?.state === 'ready' ? '。' : '；就绪后'}可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
             <p className={styles.skillDescription}>提供 {skill.status ? [...new Set(skill.status.files.map(file => file.agent))].join('、') : '各'} 的项目落点。补充缺失文件，并把官方旧版升级到当前版本；官方旧版以外的同名文件（含你改过的）保留不覆盖。</p>
             <label className={styles.skillInstallLabel}><input type="checkbox" checked={skill.status?.marker ?? false} disabled={busy || skill.loading || skill.id !== current.id} onChange={event => void toggleProjectMarker(current, event.target.checked)} /><span>写入项目规则文件（AGENTS.md / CLAUDE.md）<small>只注入案屿的受管区块，块外一字不动；会修改被 git 跟踪的文件，默认关闭。规则文件不存在时不新建。</small></span></label>
             {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{file.agent} · {skillFileLabels[file.state]}{evidenceLabels[file.evidence] ? `（${evidenceLabels[file.evidence]}）` : ''}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
+            {skillPlan.id === current.id && (skillPlan.loading || skillPlan.error || skillPlan.plan) && <div className={styles.skillFiles}>
+              <p className={styles.skillDescription}>{skillPlan.loading ? '正在检查将要发生的动作…' : skillPlan.error || `检查结果：新建 ${skillPlan.plan?.counts.create ?? 0}、追加 ${skillPlan.plan?.counts.append ?? 0}、替换 ${skillPlan.plan?.counts.replace ?? 0}、跳过 ${skillPlan.plan?.counts.skip ?? 0}、冲突 ${skillPlan.plan?.counts.conflict ?? 0}、错误 ${skillPlan.plan?.counts.error ?? 0}。检查不会写任何文件。`}</p>
+              {skillPlan.plan && <ul>{skillPlan.plan.entries.map(entry => <li key={entry.key}><code>{entry.path}</code><span>{actionLabels[entry.action]} · {entry.reason}</span></li>)}</ul>}
+            </div>}
+            {removal.id === current.id && removal.result && <div className={styles.skillFiles}>
+              <p className={styles.skillDescription}>撤除结果：删除 {removal.result.counts.removed} 项、保留 {removal.result.counts.kept} 项、跳过 {removal.result.counts.skipped} 项。父目录与 TASKS.md 未被改动。</p>
+              <ul>{removal.result.entries.map(entry => <li key={entry.key}><code>{entry.path}</code><span>{entry.action === 'removed' ? '已删除' : entry.action === 'kept' ? '已保留' : '已跳过'} · {entry.reason}</span></li>)}</ul>
+            </div>}
           </section>}
           <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><span>案屿只读取记录、生成文字，不执行项目命令</span></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
@@ -1001,6 +1038,11 @@ function App() {
     {removeTarget && <Modal title="移出看板" close={() => { if (!busy) setRemoveTarget(null); }}><div className={styles.projectForm}>
       <p>将「{removeTarget.name}」移出看板？项目目录和 TASKS.md 不会被删除，之后仍可重新添加。</p>
       <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setRemoveTarget(null)}>取消</button><button className={`${styles.primary} ${styles.dangerButton}`} disabled={busy} onClick={() => void remove(removeTarget)}>{busy ? '正在移出…' : '移出看板'}</button></div>
+    </div></Modal>}
+    {skillRemove && <Modal title="撤除项目 Skill" close={() => { if (!busy) setSkillRemove(null); }}><div className={styles.projectForm}>
+      <p>只撤除案屿写进「{skillRemove.name}」的内容：官方版本的整文件会被删除，你自己改过的同名文件会保留；AGENTS.md / CLAUDE.md 只删受管区块，文件本身保留。</p>
+      <p className={styles.skillDescription}>父目录（如 .agents、.claude）和 TASKS.md 不会被删除，不会执行 git 操作。</p>
+      <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setSkillRemove(null)}>取消</button><button className={`${styles.primary} ${styles.dangerButton}`} disabled={busy} onClick={() => void removeProjectSkill(skillRemove)}>{busy ? '正在撤除…' : '撤除'}</button></div>
     </div></Modal>}
     {taskDelete && <Modal title="删除任务" close={() => { if (!busy) setTaskDelete(null); }}><div className={styles.projectForm}>
       <p>从「{taskDelete.project.name}」的 TASKS.md 删除这条任务？只删任务行，交接摘要和工作留痕不会改动。</p>

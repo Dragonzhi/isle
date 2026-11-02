@@ -3,10 +3,10 @@ import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { BranchList, GitHistory, Project, ProjectSkill, SkillFile, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
+import type { BranchList, GitHistory, Project, ProjectSkill, SkillAction, SkillFile, SkillPlan, SkillPlanEntry, SkillRemoval, SkillRemovalResult, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
 import type { Adapter, SkillOptions } from './adapters.ts';
 import { ADAPTERS, adapterEnabled, loadedAdapters, migrateHistory, skillReport } from './adapters.ts';
-import { installMarker, scanMarker } from './marker.ts';
+import { installMarker, isBlank, removeMarker, scanMarker } from './marker.ts';
 import { hash, parseTasks, template, updateRecord, updateTask } from './tasks.ts';
 
 const runGit = promisify(execFile);
@@ -529,6 +529,113 @@ export class Store {
     await validateDirectory(entry.path);
     const marker = (await this.markerProjects()).includes(id);
     return this.skillStatus(entry.path, undefined, { marker });
+  }
+
+  async planProjectSkill(id: string) {
+    const entry = (await this.registry()).entries.find(item => item.id === id);
+    if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+    await validateDirectory(entry.path);
+    const marker = (await this.markerProjects()).includes(id);
+    return this.planSkill(entry.path, undefined, { marker });
+  }
+
+  // 干跑：只读文件、算出会发生的动作，任何一条都不写盘。
+  async planSkill(directory: string, history?: Record<string, string[]>, options: SkillOptions = {}): Promise<SkillPlan> {
+    const published = history ? migrateHistory(history) : await skillHistory();
+    const marker = options.marker === true;
+    const templates = new Map((await loadedAdapters()).map(item => [item.adapter.key, item.data]));
+    const entries: SkillPlanEntry[] = [];
+    const push = (adapter: Adapter, action: SkillAction, reason: string) => entries.push({ agent: adapter.agent, key: adapter.key, path: adapter.path, kind: adapter.kind, action, reason });
+    for (const adapter of ADAPTERS) {
+      const file = path.join(directory, adapter.path);
+      if (adapter.kind === 'marker') {
+        if (!marker) { push(adapter, 'skip', '未开启写入项目规则文件'); continue; }
+        try {
+          const existing = await readRegular(file).catch(error => { if (code(error) === 'ENOENT') return null; throw error; });
+          if (!existing) { push(adapter, 'skip', '规则文件不存在，不会新建'); continue; }
+          const scan = scanMarker(existing.data);
+          if (scan.broken) { push(adapter, 'error', '标记不完整，请手动检查'); continue; }
+          const planned = installMarker(existing.data);
+          if ('error' in planned) { push(adapter, 'error', planned.error); continue; }
+          if (planned.data.equals(existing.data)) { push(adapter, 'skip', '受管区块已是最新'); continue; }
+          if (!scan.complete) { push(adapter, 'append', '在文件末尾追加案屿受管区块'); continue; }
+          push(adapter, 'replace', scan.complete > 1 ? `把 ${scan.complete} 个受管区块收敛为一份` : '只替换 begin 到 end 之间的内容');
+        } catch (error) {
+          push(adapter, 'error', (error as Error).message);
+        }
+        continue;
+      }
+      const data = templates.get(adapter.key);
+      if (!data || !adapterEnabled(adapter, options.enabled ?? [])) { push(adapter, 'skip', '证据不足，默认不安装'); continue; }
+      try {
+        const existing = await readRegular(file).catch(error => { if (code(error) === 'ENOENT') return null; throw error; });
+        if (!existing) { push(adapter, 'create', '将新建该文件'); continue; }
+        if (existing.data.equals(data)) { push(adapter, 'skip', '已是当前版本'); continue; }
+        if ((published[adapter.key] ?? []).includes(digest(existing.data))) { push(adapter, 'replace', '官方旧版，将升级到当前版本'); continue; }
+        push(adapter, 'conflict', '内容与官方版本不同，视为用户自有，不会覆盖');
+      } catch (error) {
+        push(adapter, 'error', (error as Error).message);
+      }
+    }
+    const counts: Record<SkillAction, number> = { create: 0, append: 0, replace: 0, remove: 0, skip: 0, conflict: 0, error: 0 };
+    for (const entry of entries) counts[entry.action] += 1;
+    return { entries, counts };
+  }
+
+  async removeProjectSkill(id: string) {
+    return this.write(async () => {
+      const entry = (await this.registry()).entries.find(item => item.id === id);
+      if (!entry) throw new AppError('项目不在清单中，请刷新。', 404);
+      await validateDirectory(entry.path);
+      const marker = (await this.markerProjects()).includes(id);
+      return this.removeSkill(entry.path, undefined, { marker });
+    });
+  }
+
+  // 只撤案屿自己写进去的字节：整文件按版本判定删，受管区块只删块，父目录一律不动。
+  async removeSkill(directory: string, history?: Record<string, string[]>, options: SkillOptions = {}): Promise<SkillRemovalResult> {
+    const published = history ? migrateHistory(history) : await skillHistory();
+    const marker = options.marker === true;
+    const templates = new Map((await loadedAdapters()).map(item => [item.adapter.key, item.data]));
+    const entries: SkillRemoval[] = [];
+    const push = (adapter: Adapter, action: SkillRemoval['action'], reason: string) => entries.push({ agent: adapter.agent, key: adapter.key, path: adapter.path, action, reason });
+    for (const adapter of ADAPTERS) {
+      const file = path.join(directory, adapter.path);
+      if (adapter.kind === 'marker') {
+        if (!marker) { push(adapter, 'skipped', '未开启写入项目规则文件，没有可撤除的区块'); continue; }
+        try {
+          const existing = await readRegular(file).catch(error => { if (code(error) === 'ENOENT') return null; throw error; });
+          if (!existing) { push(adapter, 'skipped', '规则文件不存在'); continue; }
+          const scan = scanMarker(existing.data);
+          if (scan.broken) { push(adapter, 'kept', '标记不完整，未改动，请手动检查'); continue; }
+          if (!scan.complete) { push(adapter, 'skipped', '文件里没有案屿的受管区块'); continue; }
+          const result = removeMarker(existing.data);
+          if ('error' in result) { push(adapter, 'kept', result.error); continue; }
+          if (result.data.equals(existing.data)) { push(adapter, 'skipped', '没有可删除的受管区块'); continue; }
+          // 删完只剩空白就保留文件，不替用户决定删除。
+          if (isBlank(result.data)) { push(adapter, 'skipped', '撤除后文件只剩空白，已保留文件'); continue; }
+          await this.publishGuarded(file, result.data, digest(existing.data));
+          push(adapter, 'removed', '已删除受管区块，文件与其他内容保留');
+        } catch (error) {
+          push(adapter, 'kept', (error as Error).message);
+        }
+        continue;
+      }
+      const data = templates.get(adapter.key) ?? null;
+      try {
+        const existing = await readRegular(file).catch(error => { if (code(error) === 'ENOENT') return null; throw error; });
+        if (!existing) { push(adapter, 'skipped', '文件不存在'); continue; }
+        const official = data !== null && (existing.data.equals(data) || (published[adapter.key] ?? []).includes(digest(existing.data)));
+        if (!official) { push(adapter, 'kept', '用户已修改，未删除'); continue; }
+        await fs.unlink(file);
+        push(adapter, 'removed', '官方版本，已删除；父目录保留');
+      } catch (error) {
+        push(adapter, 'kept', (error as Error).message);
+      }
+    }
+    const counts = { removed: 0, kept: 0, skipped: 0 };
+    for (const entry of entries) counts[entry.action] += 1;
+    return { entries, counts };
   }
 
   async installProjectSkill(id: string) {
