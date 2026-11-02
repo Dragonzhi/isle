@@ -85,7 +85,7 @@ export const ADAPTERS: Adapter[] = [
     note: 'ZCode 工作区 skill 根（.zcode/skills）的入口文件',
   },
   {
-    agent: 'AGENTS.md 通用约定',
+    agent: 'Codex / Trae / DeepSeek Harness',
     key: 'agents-md',
     path: 'AGENTS.md',
     kind: 'marker',
@@ -95,7 +95,7 @@ export const ADAPTERS: Adapter[] = [
     note: 'Codex、Trae、DeepSeek Harness 都会读项目根的 AGENTS.md；ZCode 只读用户级 ~/.zcode/AGENTS.md，不算项目落点',
   },
   {
-    agent: 'CLAUDE.md 通用约定',
+    agent: 'Claude Code / DeepSeek Harness',
     key: 'claude-md',
     path: 'CLAUDE.md',
     kind: 'marker',
