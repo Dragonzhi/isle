@@ -91,6 +91,7 @@ export async function createApplication(options: { home: string; dev?: boolean; 
         if (req.method === 'PATCH' && taskRoute) { json(await store.editTask(taskRoute[1], input.line, input.action, input.hash, input.title)); return; }
         if (req.method === 'POST' && workspaceRoute) { json(await store.addWorkspace(workspaceRoute[1], { path: input.path, name: input.name, registryHash: input.registryHash, installSkill: input.installSkill }), 201); return; }
         if (req.method === 'POST' && skillRoute) { json(await store.installProjectSkill(skillRoute[1])); return; }
+        if (req.method === 'PATCH' && skillRoute) { json(await store.setProjectMarker(skillRoute[1], input.marker)); return; }
         if (req.method === 'PATCH' && url.pathname === '/api/agents') { json(await store.saveAgents(input.agents, input.settingsHash)); return; }
         if (req.method === 'POST' && url.pathname === '/api/projects') { json(await store.register({ path: input.path, name: input.name, registryHash: input.registryHash, installSkill: input.installSkill }), 201); return; }
         const match = url.pathname.match(/^\/api\/projects\/([a-f0-9]{24})(\/repoint)?$/);

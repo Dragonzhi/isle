@@ -393,6 +393,17 @@ function App() {
     } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
     finally { setBusy(false); }
   }
+  async function toggleProjectMarker(project: Project, marker: boolean) {
+    if (busy) return;
+    setBusy(true);
+    const token = ++skillToken.current;
+    try {
+      const status = await request('PATCH', `/${project.id}/skill`, { marker }) as ProjectSkill;
+      if (token === skillToken.current) setSkill({ id: project.id, status, loading: false, error: '' });
+      setNotice({ message: marker ? '已开启：只往规则文件里写案屿的受管区块，块外一字不动。' : '已关闭：不再写入规则文件；已注入的区块仍保留。' });
+    } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
+    finally { setBusy(false); }
+  }
   function stamp() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; }
   function gitCommand(project: Project) {
     const target = `"${project.path}"`;
@@ -895,6 +906,7 @@ function App() {
             <div className={styles.summaryHeading}><h2>项目 Skill</h2><button className={styles.quietButton} disabled={busy || skill.loading} onClick={() => void (skill.status?.state === 'ready' ? loadSkill(current) : installProjectSkill(current))}><Icon name="refresh" size={14} />{skill.status?.state === 'ready' ? '重新检查' : skill.status?.state === 'outdated' ? '升级' : skill.status?.state === 'missing' ? '安装' : skill.status?.state === 'partial' ? '补齐' : '安装 / 补齐'}</button></div>
             <p className={styles.skillDescription}>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}{skill.status ? `（${skillReady(skill.status)}）` : ''}{skill.status?.state === 'ready' ? '。' : '；就绪后'}可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</p>
             <p className={styles.skillDescription}>提供 {skill.status ? [...new Set(skill.status.files.map(file => file.agent))].join('、') : '各'} 的项目落点。补充缺失文件，并把官方旧版升级到当前版本；官方旧版以外的同名文件（含你改过的）保留不覆盖。</p>
+            <label className={styles.skillInstallLabel}><input type="checkbox" checked={skill.status?.marker ?? false} disabled={busy || skill.loading || skill.id !== current.id} onChange={event => void toggleProjectMarker(current, event.target.checked)} /><span>写入项目规则文件（AGENTS.md / CLAUDE.md）<small>只注入案屿的受管区块，块外一字不动；会修改被 git 跟踪的文件，默认关闭。规则文件不存在时不新建。</small></span></label>
             {skill.id === current.id && skill.status && <details className={styles.skillFiles}><summary>查看安装文件</summary><ul>{skill.status.files.map(file => <li key={file.path}><code>{file.path}</code><span>{file.agent} · {skillFileLabels[file.state]}{evidenceLabels[file.evidence] ? `（${evidenceLabels[file.evidence]}）` : ''}{file.message ? `：${file.message}` : ''}</span></li>)}</ul></details>}
           </section>}
           <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><span>案屿只读取记录、生成文字，不执行项目命令</span></footer>

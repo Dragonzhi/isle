@@ -33,7 +33,9 @@ test('import installs project skill and native entrypoints without changing exis
   assert.equal(status.state, 'ready');
   const { ADAPTERS } = await import('../server/adapters.ts');
   assert.equal(status.files.length, ADAPTERS.length);
-  assert.equal(status.counts.ready + status.counts.unverified, ADAPTERS.length);
+  // 默认关闭受管区块：marker 落点算 skipped，但没有一条是缺失、冲突或报错。
+  assert.equal(status.counts.missing + status.counts.custom + status.counts.outdated + status.counts.error, 0);
+  assert.equal(status.marker, false);
   assert.deepEqual(await fs.readFile(file), original);
   assert.equal(await fs.readFile(path.join(project, 'AGENTS.md'), 'utf8'), '原有规则\n');
   assert.equal(await fs.readFile(path.join(project, 'CLAUDE.md'), 'utf8'), '其他团队约定\n');
