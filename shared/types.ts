@@ -26,8 +26,20 @@ export type GitHistory = { available: boolean; reason?: string; entries: GitEntr
 export type Workspace = { path: string; branch: string; head: string; registered: boolean; name: string; reason?: string };
 export type Workspaces = { available: boolean; reason?: string; entries: Workspace[] };
 export type BranchList = { available: boolean; reason?: string; current: string; branches: string[] };
-export type SkillFile = { path: string; state: 'ready' | 'missing' | 'custom' | 'outdated' | 'error'; message?: string };
-export type ProjectSkill = { state: 'ready' | 'missing' | 'partial' | 'custom' | 'outdated' | 'error'; files: SkillFile[] };
+// 适配器模型：kind 说清案屿拥有这份落点的哪一部分，evidence 说清这条落点被核到哪一步。
+// canonical / entry 是整文件，案屿拥有全部字节；marker 只拥有 begin 到 end 之间。
+export type AdapterKind = 'canonical' | 'entry' | 'marker';
+export type Evidence = 'local' | 'docs' | 'unverified';
+// skipped：案屿有权不写（用户在设置里关掉，或规则文件根本不存在）；unverified：证据不足，默认不装。
+export type SkillState = 'ready' | 'missing' | 'custom' | 'outdated' | 'error' | 'skipped' | 'unverified';
+export type SkillCounts = { ready: number; missing: number; custom: number; outdated: number; error: number; skipped: number; unverified: number };
+export type SkillFile = { agent: string; path: string; kind: AdapterKind; evidence: Evidence; note?: string; state: SkillState; message?: string };
+export type ProjectSkill = { state: SkillState | 'partial'; files: SkillFile[]; counts: SkillCounts };
+export type SkillAction = 'create' | 'append' | 'replace' | 'remove' | 'skip' | 'conflict' | 'error';
+export type SkillPlanEntry = { agent: string; key: string; path: string; kind: AdapterKind; action: SkillAction; reason: string };
+export type SkillPlan = { entries: SkillPlanEntry[]; counts: Record<SkillAction, number> };
+export type SkillRemoval = { agent: string; key: string; path: string; action: 'removed' | 'kept' | 'skipped'; reason: string };
+export type SkillRemovalResult = { entries: SkillRemoval[]; counts: { removed: number; kept: number; skipped: number } };
 
 export function focusTask(tasks?: Task[]): Task | undefined {
   if (!tasks || !tasks.length) return undefined;

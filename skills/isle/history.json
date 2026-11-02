@@ -1,11 +1,15 @@
 {
-  "note": "已发布过的 Skill 模板内容哈希（sha256）。只读，随应用发布。改模板时把上一版的哈希追加到对应数组，'安装／补齐' 才能把官方旧版升级到新版；不在表内且与当前模板不同的文件视为用户自有，永不覆盖。",
-  "skill": [
+  "note": "已发布过的 Skill 模板内容哈希（sha256）。只读，随应用发布。改模板时把上一版的哈希追加到对应数组，'安装／补齐' 才能把官方旧版升级到新版；不在表内且与当前模板不同的文件视为用户自有，永不覆盖。键与 server/adapters.ts 的 Adapter.key 一一对应；旧的 skill / metadata / entry 键仍可读，读取时会自动迁移。",
+  "agents-skill": [
     "5d5fbfe23e092809d86c68ec0d2c83440b66b519d7e2726a406c535cff732be1",
     "6d22ae755f29ff6eaa7ddab4bef117ce109565fc4c53e515915797db993c9b7f",
     "a916212bbd4c1000c4a2445cf6914ecfb0646d6af4f5b15eef9af979d943821f",
     "0b521cd41234c9800fc9d96eed0cc5cd372bb97d8bbe325fb4f0e3b29b825637"
   ],
-  "metadata": [],
-  "entry": []
+  "agents-metadata": [],
+  "claude-entry": [],
+  "trae-entry": [],
+  "zcode-entry": [],
+  "agents-md": [],
+  "claude-md": []
 }

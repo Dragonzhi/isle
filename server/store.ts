@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { BranchList, GitHistory, Project, ProjectSkill, SkillFile, Snapshot, Workspace, Workspaces } from '../shared/types.ts';
+import { ADAPTERS, adapterEnabled, loadedAdapters, migrateHistory, skillReport } from './adapters.ts';
 import { hash, parseTasks, template, updateRecord, updateTask } from './tasks.ts';
 
 const runGit = promisify(execFile);
@@ -109,20 +110,6 @@ type Entry = { id: string; path: string; name: string; line: number };
 type Registry = { data: Buffer; entries: Entry[]; lines: string[]; warnings: string[] };
 const backupFormat = 'isle-task-backup-v1';
 
-async function skillTemplates() {
-  const [skill, metadata] = await Promise.all([
-    fs.readFile(new URL('../skills/isle/SKILL.md', import.meta.url)),
-    fs.readFile(new URL('../skills/isle/agents/openai.yaml', import.meta.url)),
-  ]);
-  const entry = Buffer.from(`---\nname: isle\ndescription: 案屿开工、收工和项目交接入口；需要按案屿规范回写 TASKS.md 时使用。\n---\n\n# 案屿项目交接\n\n先完整读取并遵循[通用案屿规范](../../../.agents/skills/isle/SKILL.md)，再按用户要求执行开工或收工。\n规范文件位于项目根目录的 .agents/skills/isle/SKILL.md，任务文件为同一项目根目录的 TASKS.md，不在此入口目录下。\n如果通用规范缺失，提示用户在案屿中补齐项目 Skill，不自行编造规则。\n`);
-  return [
-    { id: 'skill', path: '.agents/skills/isle/SKILL.md', data: skill },
-    { id: 'metadata', path: '.agents/skills/isle/agents/openai.yaml', data: metadata },
-    { id: 'entry', path: '.claude/skills/isle/SKILL.md', data: entry },
-    { id: 'entry', path: '.trae/skills/isle/SKILL.md', data: entry },
-  ];
-}
-
 const digest = (data: Buffer) => createHash('sha256').update(data).digest('hex');
 
 // Published template hashes. A file whose bytes match a published version is an official
@@ -136,18 +123,8 @@ async function skillHistory(): Promise<Record<string, string[]>> {
       if (!Array.isArray(value)) continue;
       result[key] = value.filter((item): item is string => typeof item === 'string' && /^[a-f0-9]{64}$/.test(item));
     }
-    return result;
+    return migrateHistory(result);
   } catch { return {}; }
-}
-
-function skillReport(files: SkillFile[]): ProjectSkill {
-  const primary = files[0].state;
-  const state = files.every(file => file.state === 'ready') ? 'ready'
-    : files.some(file => file.state === 'error') ? 'error'
-    : primary === 'custom' ? 'custom'
-    : files.some(file => file.state === 'outdated') ? 'outdated'
-    : files.every(file => file.state === 'missing') ? 'missing' : 'partial';
-  return { state, files };
 }
 
 export function decodeBackup(data: Buffer, target: string) {
@@ -425,41 +402,52 @@ export class Store {
     await this.ensureFile(path.join(directory, 'TASKS.md'), Buffer.from(template(name)));
   }
 
-  async skillStatus(directory: string, history?: Record<string, string[]>): Promise<ProjectSkill> {
-    const published = history ?? await skillHistory();
-    const files = await Promise.all((await skillTemplates()).map(async item => {
+  async skillStatus(directory: string, history?: Record<string, string[]>, enabled: readonly string[] = []): Promise<ProjectSkill> {
+    const published = history ? migrateHistory(history) : await skillHistory();
+    const templates = new Map((await loadedAdapters()).map(item => [item.adapter.key, item.data]));
+    const files = await Promise.all(ADAPTERS.map(async adapter => {
+      const file: SkillFile = { agent: adapter.agent, path: adapter.path, kind: adapter.kind, evidence: adapter.evidence, note: adapter.note, state: 'missing' };
+      // 受管区块在逐条落盘前先报「未实现」，避免界面把候选落点算成已就绪。
+      if (adapter.kind === 'marker' || !adapterEnabled(adapter, enabled)) {
+        return { ...file, state: 'unverified', message: '该落点尚未启用，未写入' } as SkillFile;
+      }
+      const data = templates.get(adapter.key);
+      if (!data) return { ...file, state: 'unverified', message: '该落点尚未启用，未写入' } as SkillFile;
       try {
-        const { data } = await readRegular(path.join(directory, item.path));
-        const state = data.equals(item.data) ? 'ready' : (published[item.id] ?? []).includes(digest(data)) ? 'outdated' : 'custom';
-        return { path: item.path, state } as SkillFile;
+        const existing = await readRegular(path.join(directory, adapter.path));
+        const state = existing.data.equals(data) ? 'ready' : (published[adapter.key] ?? []).includes(digest(existing.data)) ? 'outdated' : 'custom';
+        return { ...file, state } as SkillFile;
       } catch (error) {
-        return { path: item.path, state: code(error) === 'ENOENT' ? 'missing' : 'error', message: code(error) === 'ENOENT' ? undefined : (error as Error).message } as SkillFile;
+        const missing = code(error) === 'ENOENT';
+        return { ...file, state: missing ? 'missing' : 'error', message: missing ? undefined : (error as Error).message } as SkillFile;
       }
     }));
     return skillReport(files);
   }
 
-  async ensureSkill(directory: string, history?: Record<string, string[]>): Promise<ProjectSkill> {
+  async ensureSkill(directory: string, history?: Record<string, string[]>, enabled: readonly string[] = []): Promise<ProjectSkill> {
     const failures = new Map<string, string>();
-    const published = history ?? await skillHistory();
-    for (const [index, item] of (await skillTemplates()).entries()) {
-      const file = path.join(directory, item.path);
+    const published = history ? migrateHistory(history) : await skillHistory();
+    for (const { adapter, data } of await loadedAdapters()) {
+      // marker 的写入实现留到受管区块那一步；unverified 落点默认不动。
+      if (!data || !adapterEnabled(adapter, enabled)) continue;
+      const file = path.join(directory, adapter.path);
       try {
         await noLinks(file);
         await fs.mkdir(path.dirname(file), { recursive: true });
         await noLinks(file);
         const existing = await readRegular(file).catch(error => { if (code(error) === 'ENOENT') return null; throw error; });
-        if (!existing) await this.ensureFile(file, item.data, '项目 Skill');
+        if (!existing) await this.ensureFile(file, data, '项目 Skill');
         // Only byte-identical copies of a published version are replaced; anything else is user-owned.
-        else if (!existing.data.equals(item.data) && (published[item.id] ?? []).includes(digest(existing.data))) await this.atomic(file, item.data);
-        // Other entrypoints must not redirect agents into an unknown, user-owned skill.
-        if (index === 0 && !(await readRegular(file)).data.equals(item.data)) break;
+        else if (!existing.data.equals(data) && (published[adapter.key] ?? []).includes(digest(existing.data))) await this.atomic(file, data);
+        // Entrypoints must not redirect agents into an unknown, user-owned canonical skill.
+        if (adapter.template === 'skill' && !(await readRegular(file)).data.equals(data)) break;
       } catch (error) {
-        failures.set(item.path, (error as Error).message);
-        if (index === 0) break;
+        failures.set(adapter.path, (error as Error).message);
+        if (adapter.template === 'skill') break;
       }
     }
-    const result = await this.skillStatus(directory, published);
+    const result = await this.skillStatus(directory, published, enabled);
     return skillReport(result.files.map(file => failures.has(file.path) ? { ...file, state: 'error', message: failures.get(file.path) } : file));
   }
 
