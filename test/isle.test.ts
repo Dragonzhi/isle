@@ -845,3 +845,27 @@ test('task endpoint edits a title while keeping tags and hash protection', async
   const stale = await fetch(endpoint, { method: 'PATCH', headers, body: JSON.stringify({ line: first.line, action: 'edit', title: '再改', hash: project.hash }) });
   assert.equal(stale.status, 409);
 });
+
+test('dated summary rounds beyond the 3-round window are warned about', () => {
+  const rounds = (count: number) => `## 交接摘要\n${Array.from({ length: count }, (_, index) => `### 2026-10-${String(index + 10)} 第 ${index + 1} 轮\n- 变更：记一笔`).join('\n')}\n`;
+  const over = parseTasks(Buffer.from(`# 项目\nnext: 保留\n\n${rounds(5)}`));
+  assert.ok(over.warnings.includes('交接摘要已累计 5 轮分节，只保留最近 3 轮；更早的见 Git 提交。'));
+  assert.equal(over.summary, rounds(5).replace('## 交接摘要\n', '').trimEnd());
+  const atWindow = parseTasks(Buffer.from(`# 项目\nnext: 保留\n\n${rounds(3)}`));
+  assert.ok(!atWindow.warnings.some(warning => warning.includes('轮分节')));
+  // 代码块里的示例标题只是示例，不计入轮次。
+  const fenced = parseTasks(Buffer.from(`# 项目\nnext: 保留\n\n${rounds(2)}\n\`\`\`md\n### 2026-10-20 示例\n### 2026-10-21 示例\n\`\`\`\n`));
+  assert.ok(!fenced.warnings.some(warning => warning.includes('轮分节')));
+});
+
+test('history entries beyond the 12-entry window are warned about', () => {
+  const entries = (count: number) => Array.from({ length: count }, (_, index) => `- 2026-10-${String(index + 10)} · Codex：记录 ${index + 1}`).join('\n');
+  const over = parseTasks(Buffer.from(`# 项目\nnext: 保留\n\n## 工作留痕\n${entries(14)}\n`));
+  assert.ok(over.warnings.includes('工作留痕已 14 条，超出 12 条窗口；更早的见 Git 提交。'));
+  assert.equal(over.history, entries(14));
+  const atWindow = parseTasks(Buffer.from(`# 项目\nnext: 保留\n\n## 工作留痕\n${entries(12)}\n`));
+  assert.ok(!atWindow.warnings.some(warning => warning.includes('条窗口')));
+  // 代码块里的示例列表条目只是示例，不计入条数。
+  const fenced = parseTasks(Buffer.from(`# 项目\nnext: 保留\n\n## 工作留痕\n${entries(11)}\n\`\`\`md\n- 2026-11-01 · 示例\n- 2026-11-02 · 示例\n\`\`\`\n`));
+  assert.ok(!fenced.warnings.some(warning => warning.includes('条窗口')));
+});

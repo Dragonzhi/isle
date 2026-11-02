@@ -56,6 +56,24 @@ function summaryText(lines: string[], section: { start: number; end: number }) {
   return lines.slice(section.start + 1, section.end).join('').replace(/\r\n|\r/g, '\n').replace(/^\n+|\n+$/g, '');
 }
 
+// Counts record lines inside a section, skipping fenced examples the same way summarySections() does.
+function countRecords(lines: string[], section: { start: number; end: number }, isRecord: (line: string) => boolean) {
+  let total = 0;
+  let fence: { marker: string; length: number } | undefined;
+  for (let index = section.start + 1; index < section.end; index++) {
+    const line = lines[index].replace(/[\r\n]+$/, '');
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (marker) {
+      if (!fence) fence = { marker: marker[1][0], length: marker[1].length };
+      else if (fence.marker === marker[1][0] && marker[1].length >= fence.length && !marker[2].trim()) fence = undefined;
+      continue;
+    }
+    if (fence) continue;
+    if (isRecord(line)) total++;
+  }
+  return total;
+}
+
 // Shared line recognition keeps reads and small, byte-preserving edits in agreement.
 function inspect(text: string) {
   const lines = linesOf(text.replace(/^\uFEFF/, ''));
@@ -93,6 +111,19 @@ export function parseTasks(data: Buffer, modified = new Date()) {
   if (histories.length > 1) warnings.push('工作留痕分节重复，已合并显示；追加时请合并为一节并保留历史内容。');
   if (summaries.length > 1) warnings.push('交接摘要分节重复，已合并显示；请在原文件中合并为一节后再编辑摘要。');
   if (openFence) warnings.push('文件存在未闭合的代码块，请在原文件中检查分节边界。');
+  // 收工回写的记录窗口：只是读取侧提示阈值，不是硬性上限。
+  const SUMMARY_ROUND_WINDOW = 3;
+  const HISTORY_ENTRY_WINDOW = 12;
+  const rounds = summaries.reduce((count, section) =>
+    count + countRecords(lines, section, line => /^ {0,3}###[ \t]+\d{4}-\d{2}-\d{2}/.test(line)), 0);
+  if (rounds > SUMMARY_ROUND_WINDOW) {
+    warnings.push(`交接摘要已累计 ${rounds} 轮分节，只保留最近 ${SUMMARY_ROUND_WINDOW} 轮；更早的见 Git 提交。`);
+  }
+  const entries = histories.reduce((count, section) =>
+    count + countRecords(lines, section, line => /^[-*][ \t]/.test(line)), 0);
+  if (entries > HISTORY_ENTRY_WINDOW) {
+    warnings.push(`工作留痕已 ${entries} 条，超出 ${HISTORY_ENTRY_WINDOW} 条窗口；更早的见 Git 提交。`);
+  }
   const get = (key: string) => fields.get(key)?.[0]?.value ?? '';
   for (const [key, values] of fields) {
     if (values.length > 1) warnings.push(`${key} 重复出现，当前显示第一项；请在原文件中消除重复后再编辑。`);
