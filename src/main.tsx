@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import type { BranchList, GitHistory, Project, ProjectSkill, SkillPlan, SkillRemovalResult, Snapshot, Task, TaskState, Workspace, Workspaces } from '../shared/types.ts';
+import type { BranchList, GitHistory, Project, ProjectSkill, SkillFile, SkillPlan, SkillRemovalResult, SkillTargetResult, Snapshot, Task, TaskState, Workspace, Workspaces } from '../shared/types.ts';
 import { closeout, focusTask, handoff, skillTransfer, worktrees } from '../shared/types.ts';
 import { SummaryMarkdown } from './SummaryMarkdown.ts';
 import { orderHistory } from './history.ts';
@@ -26,7 +26,7 @@ async function api(method = 'GET', suffix = '', input?: unknown, endpoint = '/ap
   return request(method, suffix, input, endpoint);
 }
 
-function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron' | 'list' | 'grid' | 'more' | 'check' | 'folder'; size?: number; strokeWidth?: number }) {
+function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron' | 'list' | 'grid' | 'more' | 'check' | 'folder' | 'lock'; size?: number; strokeWidth?: number }) {
   const paths = {
     plus: 'M12 5v14M5 12h14', copy: 'M9 9h11v11H9zM15 9V4H4v11h5',
     arrow: 'M5 12h14m-6-6 6 6-6 6', refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12 0l2 5M4 12l2 5a7 7 0 0 0 12 0',
@@ -41,6 +41,7 @@ function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 
     more: 'M5 12h.01M12 12h.01M19 12h.01',
     check: 'M20 6 9 17l-5-5',
     folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z',
+    lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
@@ -108,8 +109,8 @@ function readProjectView(): ProjectView {
 function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
   return format === 'skill' ? skillTransfer(project, mode, author, criteria, goal) : mode === 'close' ? closeout(project, author) : handoff(project, criteria, goal, author);
 }
-const skillLabels = { ready: '已就绪', missing: '尚未安装', partial: '部分入口待补齐', outdated: '有官方新版本，可升级', custom: '已有自定义同名 Skill', error: '无法安装或读取', skipped: '按设置跳过', unverified: '尚未启用' };
-const skillFileLabels: Record<string, string> = { ready: '就绪', missing: '缺失', outdated: '官方旧版，可升级', custom: '已有不同内容，未覆盖', error: '无法访问', skipped: '按设置跳过', unverified: '未启用' };
+const skillLabels = { ready: '已就绪', missing: '尚未安装', partial: '部分入口待补齐', outdated: '有官方新版本，可升级', custom: '已有自定义同名 Skill', error: '无法安装或读取', skipped: '按设置跳过', unverified: '尚未启用', disabled: '未启用' };
+const skillFileLabels: Record<string, string> = { ready: '就绪', missing: '缺失', outdated: '官方旧版，可升级', custom: '已有不同内容，未覆盖', error: '无法访问', skipped: '按设置跳过', unverified: '未启用', disabled: '未启用' };
 // 证据档直接标在界面上：docs 是「未实测」，unverified 是「未启用」，别让人以为都实测过。
 const evidenceLabels: Record<string, string> = { local: '', docs: '未实测', unverified: '未启用' };
 const actionLabels: Record<string, string> = { create: '新建', append: '追加区块', replace: '替换', remove: '删除', skip: '跳过', conflict: '不动（用户自有）', error: '无法处理' };
@@ -122,6 +123,7 @@ const skillBadgeTone: Record<string, string> = {
   error: styles.skillBadgeError,
   skipped: styles.skillBadgeSkipped,
   unverified: styles.skillBadgeUnverified,
+  disabled: styles.skillBadgeSkipped,
 };
 const skillDotTone: Record<string, string> = {
   ready: styles.skillDotReady,
@@ -132,11 +134,15 @@ const skillDotTone: Record<string, string> = {
   error: styles.skillDotError,
   skipped: styles.skillDotSkipped,
   unverified: styles.skillDotUnverified,
+  disabled: styles.skillDotSkipped,
 };
+// skipped / unverified / disabled 都是「这一条不写」，不参与就绪分母。
+function skillCounted(status: ProjectSkill) {
+  return status.files.filter(file => file.state !== 'skipped' && file.state !== 'unverified' && file.state !== 'disabled').length;
+}
 function skillReady(status: ProjectSkill | null) {
   if (!status) return '';
-  const counted = status.files.filter(file => file.state !== 'skipped' && file.state !== 'unverified').length;
-  return `${status.counts.ready}/${counted}`;
+  return `${status.counts.ready}/${skillCounted(status)}`;
 }
 function App() {
   const [data, setData] = useState<Snapshot | null>(null);
@@ -179,6 +185,8 @@ function App() {
   const [skill, setSkill] = useState<{ id: string; status: ProjectSkill | null; loading: boolean; error: string }>({ id: '', status: null, loading: false, error: '' });
   const [skillPlan, setSkillPlan] = useState<{ id: string; plan: SkillPlan | null; loading: boolean; error: string }>({ id: '', plan: null, loading: false, error: '' });
   const [skillRemove, setSkillRemove] = useState<Project | null>(null);
+  const [skillAddKey, setSkillAddKey] = useState('');
+  const [skillDelete, setSkillDelete] = useState<{ project: Project; file: SkillFile } | null>(null);
   const [removal, setRemoval] = useState<{ id: string; result: SkillRemovalResult | null }>({ id: '', result: null });
   const [criteria, setCriteria] = useState('');
   const [authors, setAuthors] = useState({ start: '', close: '' });
@@ -268,13 +276,13 @@ function App() {
   const skillChecking = Boolean(skillPlanShown?.loading || skillPlanShown?.plan || skillPlanShown?.error);
   const skillPlanByPath = new Map((skillPlanShown?.plan?.entries ?? []).map(entry => [entry.path, entry]));
   const skillRowClass = `${styles.skillRow}${skillChecking ? ' ' + styles.skillRowPlan : ''}`;
-  // 「Codex / DeepSeek Harness」这类共用落点拆开去重，别在文案里重复同一家。
-  const skillAgents = skill.status
-    ? [...new Set(skill.status.files.filter(file => file.kind !== 'marker').flatMap(file => file.agent.split(' / ')))].join('、')
-    : '各 Agent';
+  // 表里只列已添加的落点；选择器里列还没添加的那些。
+  const skillShown = skill.id === current?.id && skill.status ? skill.status.files.filter(file => file.enabled) : [];
+  const skillChoices = skill.id === current?.id && skill.status ? skill.status.files.filter(file => !file.enabled) : [];
   useEffect(() => {
     setOpenSections({ summary: false, history: false, git: false });
     setMoreOpen(false);
+    setSkillAddKey('');
   }, [current?.id]);
   useEffect(() => {
     if (!moreOpen) return;
@@ -452,16 +460,32 @@ function App() {
     } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
     finally { setBusy(false); }
   }
-  async function toggleProjectMarker(project: Project, marker: boolean) {
-    if (busy) return;
+  // 选择器里添加、行尾删除一条落点：添加立即写入，删除只清案屿写进去的字节。
+  async function changeSkillTarget(project: Project, key: string, enabled: boolean) {
+    if (busy || !key) return;
     setBusy(true);
     const token = ++skillToken.current;
     try {
-      const status = await request('PATCH', `/${project.id}/skill`, { marker }) as ProjectSkill;
-      if (token === skillToken.current) setSkill({ id: project.id, status, loading: false, error: '' });
-      setNotice({ message: marker ? '已开启：只往规则文件里写案屿的受管区块，块外一字不动。' : '已关闭：不再写入规则文件；已注入的区块仍保留。' });
+      const result = await request('PATCH', `/${project.id}/skill`, { key, enabled }) as SkillTargetResult;
+      if (token === skillToken.current) setSkill({ id: project.id, status: result.skill, loading: false, error: '' });
+      setSkillPlan({ id: '', plan: null, loading: false, error: '' });
+      setSkillAddKey('');
+      const name = result.skill.files.find(item => item.key === key)?.agent ?? key;
+      setNotice({
+        message: enabled
+          ? result.action === 'added' ? `已添加 ${name}：文件已写入项目。` : `已添加 ${name}，但没有写入：${result.reason}`
+          : result.action === 'removed' ? `已删除 ${name}：${result.reason}` : `已从列表移除 ${name}：${result.reason}`,
+        error: enabled && result.action !== 'added',
+      });
     } catch (error) { setNotice({ message: (error as Error).message, error: true }); }
     finally { setBusy(false); }
+  }
+  // 删除一条已添加的落点：先确认，再按撤除同源规则清掉案屿写进去的字节。
+  async function deleteSkillTarget() {
+    if (!skillDelete) return;
+    const target = skillDelete;
+    setSkillDelete(null);
+    await changeSkillTarget(target.project, target.file.key, false);
   }
   function stamp() { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; }
   function gitCommand(project: Project) {
@@ -973,34 +997,107 @@ function App() {
             <p className={styles.skillStateLine}>
               <span className={`${styles.skillDot} ${skillDotTone[skill.status?.state ?? ''] ?? ''}`} aria-hidden="true" />
               <strong>{skill.loading ? '正在检查项目 Skill…' : skill.error || (skill.status ? skillLabels[skill.status.state] : '尚未检查')}</strong>
-              {skill.status && <span className={styles.skillCount} title={`${skill.status.counts.ready} 个落点已就绪，共 ${skill.status.files.filter(file => file.state !== 'skipped' && file.state !== 'unverified').length} 个参与安装`}>{skillReady(skill.status)}</span>}
+              {skill.status && <span className={styles.skillCount} title={`${skill.status.counts.ready} 个落点已就绪，共 ${skillCounted(skill.status)} 个已添加`}>{skillReady(skill.status)}</span>}
               {skill.status?.state === 'ready' && <span className={styles.skillHint}>可以对 Agent 说：“使用 isle（案屿）Skill 收工回写，署名 Codex”。</span>}
             </p>
-            <p className={styles.skillDescription}>为 {skillAgents} 写入项目落点：补齐缺失、把官方旧版升级到当前版本；对不上的同名文件视为你自有，永不覆盖。</p>
-            <label className={styles.skillToggle}>
-              <input type="checkbox" checked={skill.status?.marker ?? false} disabled={busy || skill.loading || skill.id !== current.id} onChange={event => void toggleProjectMarker(current, event.target.checked)} />
-              <span className={styles.skillToggleBody}>
-                <span className={styles.skillToggleTitle}>写入项目规则文件（AGENTS.md / CLAUDE.md）</span>
-                <small>只注入案屿的受管区块，块外一字不动；会修改被 git 跟踪的文件，默认关闭。规则文件不存在时不新建。</small>
-              </span>
-            </label>
+            <dl className={styles.skillNotes}>
+              <div className={styles.skillNoteItem}>
+                <dt>默认</dt>
+                <dd>只写 <code>.agents/skills/isle/</code> 里的规范正文和 Codex 元数据，项目里只多一个 <code>.agents</code> 目录。</dd>
+              </div>
+              <div className={styles.skillNoteItem}>
+                <dt>按需</dt>
+                <dd>Claude Code、Trae、ZCode 的入口，以及 <code>AGENTS.md</code>、<code>CLAUDE.md</code> 受管区块，在下方添加后才创建。</dd>
+              </div>
+              <div className={styles.skillNoteItem}>
+                <dt>写入</dt>
+                <dd>缺的补上，官方旧版自动升级；你改过的同名文件永不覆盖。</dd>
+              </div>
+              <div className={styles.skillNoteItem}>
+                <dt>删除</dt>
+                <dd>只清案屿写入的字节，变空的目录一并收回；基础包常驻，清空整个 Skill 用右上角「撤除」。</dd>
+              </div>
+            </dl>
             {skillPlanShown?.loading && <p className={styles.skillDescription} role="status">正在检查将要发生的动作…</p>}
             {skillPlanShown?.error && <p className={styles.skillDescription} role="status">{skillPlanShown.error}</p>}
-            {skillPlanShown?.plan && <p className={styles.skillDescription} role="status">检查完成：新建 {skillPlanShown.plan.counts.create} · 追加 {skillPlanShown.plan.counts.append} · 替换 {skillPlanShown.plan.counts.replace} · 跳过 {skillPlanShown.plan.counts.skip} · 冲突 {skillPlanShown.plan.counts.conflict} · 无法处理 {skillPlanShown.plan.counts.error}。没有写任何文件。</p>}
+            {skillPlanShown?.plan && (() => {
+              const rows: { key: string; label: string; tone?: 'attention' }[] = [
+                { key: 'create', label: '新建' }, { key: 'replace', label: '升级' }, { key: 'append', label: '追加区块' },
+                { key: 'conflict', label: '冲突', tone: 'attention' }, { key: 'error', label: '无法处理', tone: 'attention' }, { key: 'skip', label: '跳过' },
+              ];
+              const counts: Record<string, number> = { create: 0, append: 0, replace: 0, conflict: 0, error: 0, skip: 0 };
+              for (const file of skillShown) {
+                const planned = skillPlanByPath.get(file.path);
+                if (planned) counts[planned.action] = (counts[planned.action] ?? 0) + 1;
+              }
+              const writes = counts.create + counts.replace + counts.append;
+              const attention = counts.conflict + counts.error;
+              return <div className={styles.skillResult} role="status">
+                <div className={styles.skillResultHead}>
+                  <span className={styles.skillResultTitle}><Icon name="list" size={14} />检查完成</span>
+                  <span className={styles.skillResultMeta}>这一步没有写任何文件</span>
+                </div>
+                <div className={styles.skillResultCounts}>{rows.filter(item => counts[item.key]).map(item => <span key={item.key} className={`${styles.skillResultCount} ${item.tone === 'attention' ? styles.skillResultCountAttention : ''}`}>{item.label} {counts[item.key]}</span>)}</div>
+                <p className={styles.skillResultHint}>{attention
+                  ? `有 ${attention} 个文件需要你确认：你改过的同名文件不会覆盖，标记残缺的规则文件也不会动。`
+                  : writes ? '点右上角「安装 / 补齐」会按上面的动作写入；没有可写的内容时不会改动任何文件。'
+                  : '所有已添加的落点都是当前版本，没有需要写入的文件。'}</p>
+              </div>;
+            })()}
             {skill.id === current.id && skill.status && <div className={styles.skillTable}>
-              <div className={`${skillRowClass} ${styles.skillRowHead}`}><span>落点</span><span>Agent</span><span>状态</span>{skillChecking && <span>检查</span>}</div>
-              {skill.status.files.map(file => <div className={skillRowClass} key={file.path}>
-                <code className={styles.skillPath}>{file.path}</code>
+              <div className={`${skillRowClass} ${styles.skillRowHead}`}><span>落点</span><span>Agent</span><span>状态</span>{skillChecking && <span>检查</span>}<span>操作</span></div>
+              {skillShown.map(file => <div className={skillRowClass} key={file.path}>
+                <code className={styles.skillPath} title={file.note}>{file.path}</code>
                 <span className={styles.skillAgent}>{file.agent}</span>
                 <span className={`${styles.skillBadge} ${skillBadgeTone[file.state] ?? ''}`}>{skillFileLabels[file.state]}{evidenceLabels[file.evidence] ? ` · ${evidenceLabels[file.evidence]}` : ''}</span>
                 {skillChecking && <span className={styles.skillPlanCell}>{skillPlanByPath.get(file.path) ? actionLabels[skillPlanByPath.get(file.path)!.action] : '—'}</span>}
+                {file.required
+                  ? <span className={styles.skillRowLock} title="基础包：各入口共用的规范正文与元数据，随项目常驻，不能删除"><Icon name="lock" size={12} />基础包</span>
+                  : <button className={styles.skillRowDelete} disabled={busy || skill.loading} title={`删除 ${file.path}；你改过的同名文件会保留`} aria-label={`删除 ${file.agent} 的 ${file.path}`} onClick={() => setSkillDelete({ project: current, file })}><Icon name="trash" size={13} />删除</button>}
                 {file.message && <span className={styles.skillNote}>{file.message}</span>}
               </div>)}
             </div>}
-            {skillRemovalShown && <div className={styles.skillTable}>
-              <p className={styles.skillDescription}>撤除完成：删除 {skillRemovalShown.counts.removed} 项、保留 {skillRemovalShown.counts.kept} 项、跳过 {skillRemovalShown.counts.skipped} 项。父目录与 TASKS.md 未改动。</p>
-              {skillRemovalShown.entries.filter(entry => entry.action !== 'removed').map(entry => <div className={styles.skillRow} key={entry.key}><code className={styles.skillPath}>{entry.path}</code><span className={styles.skillAgent}>{entry.action === 'kept' ? '已保留' : '已跳过'}</span><span className={styles.skillNote}>{entry.reason}</span></div>)}
-            </div>}
+            {skill.id === current.id && skill.status && (skillChoices.length
+              ? <div className={styles.skillAdd}>
+                <label className={styles.skillAddLabel} htmlFor="skill-add-select">添加落点</label>
+                <select id="skill-add-select" className={styles.skillAddSelect} value={skillAddKey} disabled={busy || skill.loading} onChange={event => setSkillAddKey(event.target.value)}>
+                  <option value="">选择要给哪家 Agent 写入…</option>
+                  {skillChoices.map(file => <option key={file.key} value={file.key}>{file.agent} · {file.path}</option>)}
+                </select>
+                <button className={styles.quietButton} disabled={busy || skill.loading || !skillAddKey} onClick={() => void changeSkillTarget(current, skillAddKey, true)}>添加</button>
+              </div>
+              : <p className={styles.skillDescription}>所有落点都已添加。</p>)}
+            {skillRemovalShown && (() => {
+              const removed = skillRemovalShown.entries.filter(entry => entry.action === 'removed');
+              const skipped = skillRemovalShown.entries.filter(entry => entry.action === 'skipped');
+              // 「只剩空白、已保留文件」是真正需要人看见的跳过，和用户已改动的文件放在一起。
+              const kept = skillRemovalShown.entries.filter(entry => entry.action === 'kept' || (entry.action === 'skipped' && entry.reason.includes('保留')));
+              const benign = skipped.filter(entry => !entry.reason.includes('保留'));
+              const benignReasons = [...new Set(benign.map(entry => entry.reason))]
+                .map(reason => `${reason} ×${benign.filter(entry => entry.reason === reason).length}`)
+                .join('、');
+              return <div className={styles.skillResult} role="status">
+                <div className={styles.skillResultHead}>
+                  <span className={styles.skillResultTitle}><Icon name="trash" size={14} />撤除完成</span>
+                  <div className={styles.skillResultCounts}>
+                    <span className={styles.skillResultCount}>已删除 {removed.length}</span>
+                    {kept.length > 0 && <span className={`${styles.skillResultCount} ${styles.skillResultCountAttention}`}>已保留 {kept.length}</span>}
+                    {benign.length > 0 && <span className={styles.skillResultCount}>无改动 {benign.length}</span>}
+                  </div>
+                  <button className={styles.skillResultClose} aria-label="收起撤除结果" title="收起" onClick={() => setRemoval({ id: '', result: null })}><Icon name="close" size={14} /></button>
+                </div>
+                {kept.length > 0 && <div className={styles.skillResultGroup}>
+                  <p className={styles.skillResultGroupTitle}>已保留 · 需要你留意</p>
+                  {kept.map(entry => <div className={styles.skillResultRow} key={entry.key}>
+                    <code className={styles.skillResultPath}>{entry.path}</code>
+                    <span className={styles.skillResultReason}>{entry.reason}</span>
+                  </div>)}
+                </div>}
+                {benign.length > 0 && <p className={styles.skillResultHint}>另有 {benign.length} 个落点没有可撤的字节（{benignReasons}），无需处理。</p>}
+                {removed.length > 0 && <p className={styles.skillResultHint}>已删除 {removed.length} 个文件：{removed.map(entry => entry.path).join('、')}。因案屿变空的目录已收回。</p>}
+                <p className={styles.skillResultHint}>想恢复：点右上角「安装 / 补齐」，已添加的落点会重新写入。TASKS.md 未改动。</p>
+              </div>;
+            })()}
           </section>}
           <footer className={styles.projectFooter}><span>任务、摘要与留痕保存在 TASKS.md 中</span><span>案屿只读取记录、生成文字，不执行项目命令</span></footer>
         </> : <p className={styles.emptyText}>{loading ? '正在读取项目…' : '该项目不存在或已被移除。'}</p>}
@@ -1097,8 +1194,14 @@ function App() {
     </div></Modal>}
     {skillRemove && <Modal title="撤除项目 Skill" close={() => { if (!busy) setSkillRemove(null); }}><div className={styles.projectForm}>
       <p>只撤除案屿写进「{skillRemove.name}」的内容：官方版本的整文件会被删除，你自己改过的同名文件会保留；AGENTS.md / CLAUDE.md 只删受管区块，文件本身保留。</p>
-      <p className={styles.skillDescription}>父目录（如 .agents、.claude）和 TASKS.md 不会被删除，不会执行 git 操作。</p>
+      <p className={styles.skillDescription}>撤除不区分是否添加过，会按版本判定清理全部案屿写入的字节；因案屿变空的目录一并收回，仍放着你自己的 Skill 的目录保留。TASKS.md 不会被删除，不会执行 git 操作。</p>
       <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setSkillRemove(null)}>取消</button><button className={`${styles.primary} ${styles.dangerButton}`} disabled={busy} onClick={() => void removeProjectSkill(skillRemove)}>{busy ? '正在撤除…' : '撤除'}</button></div>
+    </div></Modal>}
+    {skillDelete && <Modal title="删除落点" close={() => { if (!busy) setSkillDelete(null); }}><div className={styles.projectForm}>
+      <p>从「{skillDelete.project.name}」删除这条落点？</p>
+      <p className={styles.skillDeletePath}><code>{skillDelete.file.path}</code><span>{skillDelete.file.agent}</span></p>
+      <p className={styles.skillDescription}>只删案屿写进去的内容：官方版本的文件会删掉，你自己改过的同名文件保留；因案屿变空的目录一并收回。删除后可以随时在「添加落点」里重新添加。</p>
+      <div className={styles.dialogActions}><button className={styles.secondary} disabled={busy} onClick={() => setSkillDelete(null)}>取消</button><button className={`${styles.primary} ${styles.dangerButton}`} disabled={busy} onClick={() => void deleteSkillTarget()}>{busy ? '正在删除…' : '删除'}</button></div>
     </div></Modal>}
     {taskDelete && <Modal title="删除任务" close={() => { if (!busy) setTaskDelete(null); }}><div className={styles.projectForm}>
       <p>从「{taskDelete.project.name}」的 TASKS.md 删除这条任务？只删任务行，交接摘要和工作留痕不会改动。</p>
@@ -1172,7 +1275,8 @@ function App() {
     {gitCopy !== null && <Modal title="复制提交/推送命令" close={() => setGitCopy(null)}><div className={styles.projectForm}><p>浏览器未允许自动复制，请选中下方命令后复制，粘贴到终端自行运行。</p><textarea autoFocus className={styles.handoff} aria-label="提交/推送命令" readOnly value={gitCopy} onFocus={event => event.target.select()} /><div className={styles.dialogActions}><button className={styles.secondary} onClick={() => setGitCopy(null)}>关闭</button></div></div></Modal>}
     {notice && <div className={styles.toastRegion}>
       <div className={`${styles.notice} ${styles.toast} ${notice.error ? styles.noticeError : ''}`} role={notice.error ? 'alert' : 'status'}>
-        <span>{notice.message}</span>
+        <span className={styles.noticeMark} aria-hidden="true">{notice.error ? <Icon name="close" size={14} /> : <Icon name="check" size={14} />}</span>
+        <span className={styles.noticeText}>{notice.message}</span>
         <button aria-label="关闭提示" className={styles.iconButton} onClick={() => setNotice(null)}><Icon name="close" /></button>
       </div>
     </div>}

@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { Store } from '../server/store.ts';
-import { ADAPTERS } from '../server/adapters.ts';
+import { ADAPTERS, markerTargets } from '../server/adapters.ts';
 
 const sha = (data: Buffer) => createHash('sha256').update(data).digest('hex');
 
@@ -45,8 +45,9 @@ test('plan never writes to disk', async t => {
   const before = await tree(project);
 
   const plan = await store.planProjectSkill(id);
-  assert.equal(plan.counts.create, ADAPTERS.filter(item => item.kind !== 'marker').length);
-  assert.equal(plan.counts.skip, ADAPTERS.filter(item => item.kind === 'marker').length);
+  const base = ADAPTERS.filter(item => item.required).length;
+  assert.equal(plan.counts.create, base);
+  assert.equal(plan.counts.skip, ADAPTERS.length - base);
   assert.deepEqual(await tree(project), before, '干跑不得产生任何文件');
 
   let writes = 0;
@@ -94,13 +95,13 @@ test('plan describes the marker block actions without touching the file', async 
   const file = path.join(project, 'AGENTS.md');
   await fs.writeFile(file, rules);
 
-  const before = await store.planSkill(project, undefined, { marker: true });
+  const before = await store.planSkill(project, undefined, { targets: markerTargets() });
   const append = before.entries.find(item => item.path === 'AGENTS.md')!;
   assert.equal(append.action, 'append');
   assert.deepEqual(await fs.readFile(file), rules, '计划阶段不得写入规则文件');
 
-  await store.ensureSkill(project, undefined, { marker: true });
-  const after = await store.planSkill(project, undefined, { marker: true });
+  await store.ensureSkill(project, undefined, { targets: markerTargets() });
+  const after = await store.planSkill(project, undefined, { targets: markerTargets() });
   assert.equal(after.entries.find(item => item.path === 'AGENTS.md')!.action, 'skip');
 });
 

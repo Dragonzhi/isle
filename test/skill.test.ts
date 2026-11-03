@@ -22,36 +22,45 @@ async function fixture(t: import('node:test').TestContext) {
   return { store, project, directory, file: path.join(project, 'TASKS.md') };
 }
 
-test('import installs project skill and native entrypoints without changing existing project records or rules', async t => {
+test('import installs the shared skill package without adding other agent directories', async t => {
   const { store, project, file } = await fixture(t);
   const original = Buffer.from('\uFEFF# 项目\r\nnext: 继续\r\n## 待办\r\n- [ ] 保留\r\n');
   await fs.writeFile(file, original);
   await fs.writeFile(path.join(project, 'AGENTS.md'), '原有规则\n');
   await fs.writeFile(path.join(project, 'CLAUDE.md'), '其他团队约定\n');
   const snapshot = await store.register({ path: project, registryHash: (await store.snapshot()).registryHash });
-  const status = await store.projectSkill(snapshot.projects[0].id);
-  assert.equal(status.state, 'ready');
+  const id = snapshot.projects[0].id;
+  const status = await store.projectSkill(id);
   const { ADAPTERS } = await import('../server/adapters.ts');
+  const baseKeys = ADAPTERS.filter(item => item.required).map(item => item.key);
   assert.equal(status.files.length, ADAPTERS.length);
-  // 默认关闭受管区块：marker 落点算 skipped，但没有一条是缺失、冲突或报错。
+  assert.equal(status.state, 'ready');
+  // 默认只写基础包：没有缺失、冲突或报错，也没有别的 Agent 目录。
   assert.equal(status.counts.missing + status.counts.custom + status.counts.outdated + status.counts.error, 0);
-  assert.equal(status.marker, false);
+  assert.deepEqual(status.files.filter(item => item.enabled).map(item => item.key), baseKeys);
+  assert.deepEqual(status.files.filter(item => item.kind === 'marker').map(item => item.enabled), [false, false]);
+  for (const name of ['.claude', '.trae', '.zcode']) await assert.rejects(fs.stat(path.join(project, name)), { code: 'ENOENT' });
   assert.deepEqual(await fs.readFile(file), original);
   assert.equal(await fs.readFile(path.join(project, 'AGENTS.md'), 'utf8'), '原有规则\n');
   assert.equal(await fs.readFile(path.join(project, 'CLAUDE.md'), 'utf8'), '其他团队约定\n');
-  const canonical = await fs.readFile(path.join(project, status.files[0].path));
-  assert.deepEqual(canonical, await fs.readFile(new URL('../skills/isle/SKILL.md', import.meta.url)));
-  for (const item of status.files.filter(item => item.kind === 'entry')) {
+  const canonical = path.join(project, status.files[0].path);
+  assert.deepEqual(await fs.readFile(canonical), await fs.readFile(new URL('../skills/isle/SKILL.md', import.meta.url)));
+  assert.deepEqual(await fs.readFile(path.join(project, '.agents/skills/isle/agents/openai.yaml')), await fs.readFile(new URL('../skills/isle/agents/openai.yaml', import.meta.url)));
+  // 从选择器添加的入口，都用相对链接指回基础包。
+  for (const item of status.files.filter(item => item.kind === 'entry')) await store.setProjectTarget(id, { key: item.key, enabled: true });
+  const withEntries = await store.projectSkill(id);
+  for (const item of withEntries.files.filter(item => item.kind === 'entry')) {
     const entry = await fs.readFile(path.join(project, item.path), 'utf8');
     const link = entry.match(/\]\(([^)]+)\)/)![1];
-    assert.equal(path.resolve(path.dirname(path.join(project, item.path)), link), path.join(project, status.files[0].path));
+    assert.equal(path.resolve(path.dirname(path.join(project, item.path)), link), canonical);
   }
-  const before = await Promise.all(status.files.map(async item => (await fs.stat(path.join(project, item.path))).mtimeMs));
-  assert.equal((await store.installProjectSkill(snapshot.projects[0].id)).state, 'ready');
-  assert.deepEqual(await Promise.all(status.files.map(async item => (await fs.stat(path.join(project, item.path))).mtimeMs)), before);
+  const enabledPaths = withEntries.files.filter(item => item.enabled).map(item => path.join(project, item.path));
+  const before = await Promise.all(enabledPaths.map(async target => (await fs.stat(target)).mtimeMs));
+  assert.equal((await store.installProjectSkill(id)).state, 'ready');
+  assert.deepEqual(await Promise.all(enabledPaths.map(async target => (await fs.stat(target)).mtimeMs)), before);
 });
 
-test('opt-out keeps import read-only for skill paths; existing projects can fill missing entries without overwriting edits', async t => {
+test('opt-out keeps import read-only for skill paths; added entries can be filled without overwriting edits', async t => {
   const { store, project, file } = await fixture(t);
   const snapshot = await store.register({ path: project, registryHash: (await store.snapshot()).registryHash, installSkill: false });
   const id = snapshot.projects[0].id;
@@ -60,13 +69,16 @@ test('opt-out keeps import read-only for skill paths; existing projects can fill
   await assert.rejects(fs.stat(path.join(project, '.agents')), { code: 'ENOENT' });
   const installed = await store.installProjectSkill(id);
   assert.equal(installed.state, 'ready');
+  await store.setProjectTarget(id, { key: 'claude-entry', enabled: true });
   const claude = path.join(project, '.claude/skills/isle/SKILL.md');
   await fs.writeFile(claude, '手工定制入口\n');
   const trae = path.join(project, '.trae/skills/isle/SKILL.md');
+  const added = await store.setProjectTarget(id, { key: 'trae-entry', enabled: true });
+  assert.equal(added.skill.files.find(item => item.path.startsWith('.trae/'))!.state, 'ready');
   await fs.unlink(trae);
   const filled = await store.installProjectSkill(id);
   assert.equal(filled.state, 'partial');
-  assert.equal(filled.files.find(file => file.path.startsWith('.claude/'))!.state, 'custom');
+  assert.equal(filled.files.find(item => item.path.startsWith('.claude/'))!.state, 'custom');
   assert.equal(await fs.readFile(claude, 'utf8'), '手工定制入口\n');
   assert.ok((await fs.readFile(trae, 'utf8')).includes('../../../.agents/skills/isle/SKILL.md'));
   assert.deepEqual(await fs.readFile(file), original);
