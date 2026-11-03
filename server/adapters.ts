@@ -20,6 +20,8 @@ export type Adapter = {
   detect?: string;
   // 落点机制的简短说明，随 status 返回给界面。
   note?: string;
+  // 基础包：默认写入、不能从列表删除。其余落点要用户在选择器里添加才会出现。
+  required?: boolean;
 };
 
 export const SKILL_TEMPLATE = new URL('../skills/isle/SKILL.md', import.meta.url);
@@ -42,7 +44,8 @@ export const ADAPTERS: Adapter[] = [
     evidence: 'local',
     template: 'skill',
     detect: '.agents',
-    note: '规范正文。DeepSeek Harness 项目级根 rank 200、Trae 兼容只读路径、ZCode workspace agents 根、Codex 仓库技能根候选都包含 .agents/skills',
+    required: true,
+    note: '规范正文，所有入口共用，不能关闭。DeepSeek Harness 项目级根 rank 200、Trae 兼容只读路径、ZCode workspace agents 根、Codex 仓库技能根候选都包含 .agents/skills',
   },
   {
     agent: 'Codex',
@@ -52,7 +55,8 @@ export const ADAPTERS: Adapter[] = [
     evidence: 'local',
     template: 'metadata',
     detect: '.agents',
-    note: 'Codex 读取的技能元数据',
+    required: true,
+    note: '基础包的一部分：Codex 读取的技能元数据，与规范正文写在同一个 .agents 目录里',
   },
   {
     agent: 'Claude Code',
@@ -92,7 +96,7 @@ export const ADAPTERS: Adapter[] = [
     evidence: 'local',
     template: 'marker',
     detect: 'AGENTS.md',
-    note: 'Codex、Trae、DeepSeek Harness 都会读项目根的 AGENTS.md；ZCode 只读用户级 ~/.zcode/AGENTS.md，不算项目落点',
+    note: 'Codex、Trae、DeepSeek Harness 都会读项目根的 AGENTS.md；ZCode 只读用户级 ~/.zcode/AGENTS.md，不算项目落点。会修改被 git 跟踪的文件，默认关闭；规则文件不存在时不新建',
   },
   {
     agent: 'Claude Code / DeepSeek Harness',
@@ -102,16 +106,25 @@ export const ADAPTERS: Adapter[] = [
     evidence: 'local',
     template: 'marker',
     detect: 'CLAUDE.md',
-    note: 'Claude Code 与 DeepSeek Harness 都会读项目根的 CLAUDE.md；只注入受管区块',
+    note: 'Claude Code 与 DeepSeek Harness 都会读项目根的 CLAUDE.md；只注入受管区块。会修改被 git 跟踪的文件，默认关闭；规则文件不存在时不新建',
   },
 ];
 
-// 一次操作的可选项：enabled 是用户显式打开的证据不足落点，marker 是「写入项目规则文件」开关。
-export type SkillOptions = { enabled?: readonly string[]; marker?: boolean };
+// 每个项目一份的落点列表：键是适配器 key，值为用户在选择器里添加过的落点。
+// 键缺省就是不添加——默认只写基础包，别在项目里凭空铺开一堆 .xxx 目录。
+export type SkillTargets = Record<string, boolean>;
 
-// 证据不足的落点默认不装；调用方可以显式打开某一条（设置里勾选）。
-export function adapterEnabled(adapter: Adapter, enabled: readonly string[] = []): boolean {
-  return adapter.evidence !== 'unverified' || enabled.includes(adapter.key);
+// 一次操作的可选项，目前只有落点列表。受管区块也走选择器，不再有独立的总开关。
+export type SkillOptions = { targets?: SkillTargets };
+
+// 基础包（规范正文 + Codex 元数据）常驻：入口文件都指向它，删掉等于把 Agent 导向不存在的规范。
+export function adapterEnabled(adapter: Adapter, targets: SkillTargets = {}): boolean {
+  return adapter.required === true || targets[adapter.key] === true;
+}
+
+// 两条受管区块落点的开启映射：测试与旧 settings.skillMarkers 迁移共用这一份口径。
+export function markerTargets(): SkillTargets {
+  return Object.fromEntries(ADAPTERS.filter(adapter => adapter.kind === 'marker').map(adapter => [adapter.key, true]));
 }
 
 // 返回每条落点要落盘的字节。marker 在 S1 阶段没有写入实现，data 为 null，由调用方跳过。
@@ -148,7 +161,7 @@ export function migrateHistory(table: Record<string, string[]>): Record<string, 
 }
 
 export function emptyCounts(): SkillCounts {
-  return { ready: 0, missing: 0, custom: 0, outdated: 0, error: 0, skipped: 0, unverified: 0 };
+  return { ready: 0, missing: 0, custom: 0, outdated: 0, error: 0, skipped: 0, unverified: 0, disabled: 0 };
 }
 
 export function countStates(files: SkillFile[]): SkillCounts {
@@ -157,11 +170,11 @@ export function countStates(files: SkillFile[]): SkillCounts {
   return counts;
 }
 
-// skipped / unverified 是「案屿不写」或「证据不足」，不参与整体就绪判定：
-// 否则加一条候选适配器就会把已装好的项目从「就绪」打成「部分」。
-const inert: SkillState[] = ['skipped', 'unverified'];
+// skipped / unverified / disabled 都是「案屿这一条不写」，不参与整体就绪判定：
+// 否则加一条候选适配器、或用户在本项目关掉一条，就会把已装好的项目从「就绪」打成「部分」。
+const inert: SkillState[] = ['skipped', 'unverified', 'disabled'];
 
-export function skillReport(files: SkillFile[], marker = false): ProjectSkill {
+export function skillReport(files: SkillFile[]): ProjectSkill {
   const active = files.filter(file => !inert.includes(file.state));
   const primary = active[0]?.state;
   const state: SkillState | 'partial' = !active.length ? 'ready'
@@ -170,5 +183,5 @@ export function skillReport(files: SkillFile[], marker = false): ProjectSkill {
     : primary === 'custom' ? 'custom'
     : active.some(file => file.state === 'outdated') ? 'outdated'
     : active.every(file => file.state === 'missing') ? 'missing' : 'partial';
-  return { state, files, counts: countStates(files), marker };
+  return { state, files, counts: countStates(files) };
 }

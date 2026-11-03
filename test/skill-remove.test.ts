@@ -4,6 +4,8 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { Store } from '../server/store.ts';
 import { ADAPTERS } from '../server/adapters.ts';
+
+const baseKeys = ADAPTERS.filter(adapter => adapter.required).map(adapter => adapter.key);
 import { scanMarker } from '../server/marker.ts';
 
 async function fixture(t: import('node:test').TestContext) {
@@ -26,6 +28,8 @@ test('remove deletes official files and keeps user-edited ones', async t => {
   const { store, project } = await fixture(t);
   const snapshot = await store.register({ path: project, registryHash: (await store.snapshot()).registryHash });
   const id = snapshot.projects[0].id;
+  await store.setProjectTarget(id, { key: 'claude-entry', enabled: true });
+  await store.setProjectTarget(id, { key: 'trae-entry', enabled: true });
   const edited = path.join(project, '.claude/skills/isle/SKILL.md');
   await fs.writeFile(edited, '我自己的入口\n');
 
@@ -39,20 +43,24 @@ test('remove deletes official files and keeps user-edited ones', async t => {
   assert.ok(removed.includes('.agents/skills/isle/SKILL.md'));
   assert.ok(removed.includes('.trae/skills/isle/SKILL.md'));
   await assert.rejects(fs.stat(path.join(project, '.agents/skills/isle/SKILL.md')), { code: 'ENOENT' });
+  // 因案屿变空的目录一并收回，非空的 .claude（用户自己的入口）保留。
+  await assert.rejects(fs.stat(path.join(project, '.agents')), { code: 'ENOENT' });
+  await assert.rejects(fs.stat(path.join(project, '.trae')), { code: 'ENOENT' });
+  assert.ok((await fs.stat(path.join(project, '.claude'))).isDirectory());
 });
 
-test('remove never deletes parent directories', async t => {
+test('remove keeps directories that still hold user content', async t => {
   const { store, project } = await fixture(t);
   const snapshot = await store.register({ path: project, registryHash: (await store.snapshot()).registryHash });
   const id = snapshot.projects[0].id;
-  // 父目录里放进用户自己的东西，撤除后必须还在。
+  // 目录里放进用户自己的东西，撤除后必须还在。
   const userSkill = path.join(project, '.claude/skills/我的技能/SKILL.md');
   await fs.mkdir(path.dirname(userSkill), { recursive: true });
   await fs.writeFile(userSkill, '用户自己的 Skill\n');
 
   await store.removeProjectSkill(id);
   assert.equal(await fs.readFile(userSkill, 'utf8'), '用户自己的 Skill\n');
-  for (const directory of ['.agents', '.agents/skills', '.claude', '.claude/skills', '.trae', '.trae/skills', '.zcode', '.zcode/skills']) {
+  for (const directory of ['.claude', '.claude/skills', '.claude/skills/我的技能']) {
     assert.ok((await fs.stat(path.join(project, directory))).isDirectory(), directory + ' 必须保留');
   }
 });
@@ -68,14 +76,16 @@ test('remove is idempotent', async t => {
   assert.equal(second.counts.skipped + second.counts.kept, ADAPTERS.length);
 });
 
-test('plan reports create for everything after a clean remove', async t => {
+test('plan reports create for the base package after a clean remove', async t => {
   const { store, project } = await fixture(t);
   const snapshot = await store.register({ path: project, registryHash: (await store.snapshot()).registryHash });
   const id = snapshot.projects[0].id;
   await store.removeProjectSkill(id);
 
   const plan = await store.planProjectSkill(id);
-  for (const entry of plan.entries.filter(item => item.kind !== 'marker')) assert.equal(entry.action, 'create', entry.path);
+  for (const entry of plan.entries) {
+    assert.equal(entry.action, baseKeys.includes(entry.key) ? 'create' : 'skip', entry.path);
+  }
 });
 
 test('remove deletes only the managed block and keeps the rules file', async t => {
@@ -85,7 +95,7 @@ test('remove deletes only the managed block and keeps the rules file', async t =
   await fs.writeFile(file, rules);
   const snapshot = await store.register({ path: project, registryHash: (await store.snapshot()).registryHash });
   const id = snapshot.projects[0].id;
-  await store.setProjectMarker(id, true);
+  await store.setProjectTarget(id, { key: 'agents-md', enabled: true });
   assert.equal(scanMarker(await fs.readFile(file)).complete, 1);
 
   const result = await store.removeProjectSkill(id);
@@ -101,7 +111,7 @@ test('remove keeps a rules file that would be left blank', async t => {
   await fs.writeFile(file, '临时规则\n');
   const snapshot = await store.register({ path: project, registryHash: (await store.snapshot()).registryHash });
   const id = snapshot.projects[0].id;
-  await store.setProjectMarker(id, true);
+  await store.setProjectTarget(id, { key: 'agents-md', enabled: true });
 
   // 用户把块外的内容删掉了，撤除后只剩空白：保留文件，不替用户删除。
   await fs.writeFile(file, scanMarker(await fs.readFile(file)).complete ? (await fs.readFile(file)).subarray((await fs.readFile(file)).indexOf(Buffer.from('<!-- isle:begin -->'))) : Buffer.alloc(0));

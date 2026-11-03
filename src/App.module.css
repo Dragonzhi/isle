@@ -2327,13 +2327,19 @@
   pointer-events: none;
 }
 .toast {
+  align-items: flex-start;
+  gap: 10px;
   margin: 0;
+  padding: 12px 13px;
   pointer-events: auto;
   background: var(--sheet);
   box-shadow: var(--lp-raise-2);
   animation: isle-notice var(--motion) var(--ease-out);
 }
-.toast .iconButton { flex: none; }
+.toast .iconButton { flex: none; margin-top: -2px; }
+.noticeMark { display: inline-flex; flex: none; margin-top: 2px; color: var(--sage-dark); }
+.noticeError .noticeMark { color: var(--rust); }
+.noticeText { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.65; overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .toastRegion { top: 12px; right: 12px; width: calc(100vw - 24px); }
 }
@@ -2381,36 +2387,51 @@
 }
 .skillHint { color: var(--muted); }
 
-/* 开关：压凹的纸槽，勾选后压入墨色边框。 */
-.skillToggle {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 8px 0 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--line-dark);
-  background: var(--lp-well);
-  box-shadow: var(--lp-press-2);
-  cursor: pointer;
-  transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out);
+/* 落点说明：两段散文改成四行规格表，标签在左、规则在右，扫一眼就知道会写什么、删掉什么。 */
+.skillNotes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 28px;
+  margin: 6px 0 12px;
+  padding: 0;
 }
-.skillToggle:hover { border-color: var(--ink); }
-.skillToggle:has(input:checked) { border-color: var(--sage-dark); background: #f0f4e8; }
-.skillToggleBody { display: block; min-width: 0; }
-.skillToggleTitle { display: block; color: var(--ink); font-size: 13px; font-weight: 600; line-height: 1.6; }
-.skillToggle small { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.skillNoteItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  min-width: 0;
+  margin: 0;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+}
+.skillNoteItem dt {
+  color: var(--sage-dark);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.skillNoteItem dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.skillNoteItem code { color: var(--ink); font-family: var(--mono); font-size: 12px; }
 
-/* 落点一张表：状态与「检查」结果并排，不再重复列一遍路径。 */
+/* 落点一张表：状态、检查结果与行尾操作并排，不再重复列一遍路径。 */
 .skillTable { margin-top: 4px; border-top: 1px solid var(--line-dark); }
 .skillRow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px 116px;
+  grid-template-columns: minmax(0, 1fr) 190px 116px 72px;
   align-items: center;
   gap: 3px 14px;
   padding: 7px 0;
   border-bottom: 1px solid var(--line);
 }
-.skillRowPlan { grid-template-columns: minmax(0, 1fr) 190px 116px 84px; }
+.skillRowPlan { grid-template-columns: minmax(0, 1fr) 190px 116px 84px 72px; }
 .skillRowHead { padding: 5px 0; color: var(--muted); font-size: 12px; letter-spacing: .02em; }
 .skillPath { color: var(--ink-2); font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
 .skillAgent { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
@@ -2431,7 +2452,112 @@
 .skillBadgeCustom, .skillBadgeError { border-color: var(--rust); color: var(--rust); }
 .skillBadgeSkipped, .skillBadgeUnverified { border-color: var(--line-dark); color: var(--muted); }
 .skillPlanCell { color: var(--muted); font-size: 12px; }
+/* 行尾操作：已添加的落点给一个「删除」，基础包只标「基础包」不给删除入口。 */
+.skillRowDelete {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+  min-height: 30px;
+  padding: 2px 9px;
+  border: 1px solid var(--line-dark);
+  background: var(--sheet);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out);
+}
+.skillRowDelete svg { width: 13px; height: 13px; flex: none; }
+.skillRowDelete:hover:not(:disabled) { border-color: var(--rust); color: var(--rust); }
+.skillRowDelete:active:not(:disabled) { transform: translateY(1px); }
+.skillRowDelete:disabled { opacity: .55; cursor: not-allowed; }
+.skillRowLock { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 12px; }
+.skillRowLock svg { flex: none; color: var(--offline); }
 .skillNote { grid-column: 1 / -1; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+/* 操作结果卡：检查 / 撤除的结果都收在一张纸片上，先结论、再分组、最后给下一步。 */
+.skillResult {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line-dark);
+  background: var(--sheet);
+  box-shadow: var(--lp-raise-1);
+}
+.skillResultHead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.skillResultTitle { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
+.skillResultTitle svg { flex: none; color: var(--sage-dark); }
+.skillResultMeta { color: var(--muted); font-size: 12px; }
+.skillResultClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.skillResultClose:hover { color: var(--ink); }
+.skillResultHead .skillResultCounts { margin-left: 0; }
+.skillResultHead .skillResultClose { margin-left: auto; }
+.skillResultCounts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.skillResultCount {
+  padding: 2px 8px;
+  border: 1px solid var(--line-dark);
+  background: var(--lp-well);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+.skillResultCountAttention { border-color: var(--rust); color: var(--rust); }
+.skillResultGroup { margin-top: 12px; }
+.skillResultGroupTitle { margin: 0 0 4px; color: var(--muted); font-size: 12px; }
+.skillResultRow {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  gap: 2px 14px;
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+  align-items: baseline;
+}
+.skillResultPath { color: var(--ink-2); font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.skillResultReason { color: var(--muted); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
+.skillResultHint { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.skillDeletePath { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 6px 0 8px; }
+.skillDeletePath code { color: var(--ink); font-family: var(--mono); font-size: 13px; overflow-wrap: anywhere; }
+.skillDeletePath span { color: var(--muted); font-size: 12px; }
+
+/* 选择器：只列还没添加的落点，添加后才创建对应文件。 */
+.skillAdd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.skillAddLabel { color: var(--muted); font-size: 12px; }
+.skillAddSelect {
+  flex: 0 1 360px;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line-dark);
+  background: var(--lp-well);
+  box-shadow: var(--lp-press-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.skillAddSelect:disabled { opacity: .7; }
 
 @media (max-width: 760px) {
   .summaryHeading .skillActions { width: 100%; margin-left: 0; }
@@ -2446,6 +2572,11 @@
   .skillPath { grid-column: 1 / -1; }
   .skillAgent { grid-column: 1 / -1; }
   .skillBadge { grid-column: 1; justify-self: start; }
-  .skillPlanCell { grid-column: 2; justify-self: end; }
+  .skillPlanCell { grid-column: 1 / -1; justify-self: start; }
+  .skillRowDelete, .skillRowLock { grid-column: 2; justify-self: end; }
+  .skillAddSelect { flex-basis: 100%; }
+  .skillNotes { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .skillResultRow { grid-template-columns: minmax(0, 1fr); }
+  .skillRowDelete { min-height: 36px; padding: 4px 10px; }
 }
 

@@ -65,41 +65,42 @@ test('unverified adapters are excluded from install unless enabled', async t => 
   const skipped = await store.ensureSkill(project);
   assert.equal(skipped.files.find(item => item.path === adapter.path)!.state, 'unverified');
   await assert.rejects(fs.stat(file), { code: 'ENOENT' });
-  // 未启用的候选落点不能把已装好的项目从「就绪」打成「部分」。
+  // 默认只装基础包；没添加的落点与证据不足的候选都不参与就绪判定。
   const inactive = ADAPTERS.filter(item => !item.detect || item.kind !== 'marker');
-  const ready = ADAPTERS.filter(item => item.kind !== 'marker' && item.evidence !== 'unverified').length;
+  const base = ADAPTERS.filter(item => item.required).length;
   assert.equal(skipped.state, 'ready');
-  assert.equal(skipped.counts.ready, ready);
-  // 受管区块默认关，算 skipped；证据不足的那条算 unverified。
-  assert.equal(skipped.counts.skipped, ADAPTERS.length - ready - 1);
+  assert.equal(skipped.counts.ready, base);
+  assert.equal(skipped.counts.disabled, ADAPTERS.length - base - 1);
+  assert.equal(skipped.counts.skipped, 0);
   assert.equal(skipped.counts.unverified, 1);
   assert.ok(inactive.length > 0);
 
-  const enabled = await store.ensureSkill(project, undefined, { enabled: [adapter.key] });
+  const enabled = await store.ensureSkill(project, undefined, { targets: { [adapter.key]: true } });
   assert.equal(enabled.files.find(item => item.path === adapter.path)!.state, 'ready');
   assert.deepEqual(await fs.readFile(file), ENTRY_TEMPLATE);
   assert.equal(enabled.state, 'ready');
 });
 
-test('marker adapters are registered but not written in v0.1', async t => {
+test('marker adapters stay off until the project enables them', async t => {
   const { store, project } = await fixture(t);
   const adapter = probe(t, {
     agent: 'Probe',
     key: 'probe-marker',
-    path: 'AGENTS.md',
+    path: 'RULES.md',
     kind: 'marker',
     evidence: 'docs',
     template: 'marker',
     note: '受管区块',
   });
   await fs.writeFile(path.join(project, adapter.path), '用户自己的规则\n');
-  // 开关默认关：只登记、不写入。
+  // 默认不在列表里：只登记、不写入。
   const status = await store.ensureSkill(project);
   const file = status.files.find(item => item.path === adapter.path)!;
-  assert.equal(file.state, 'skipped');
+  assert.equal(file.state, 'disabled');
+  assert.equal(file.enabled, false);
   assert.equal(file.kind, 'marker');
-  assert.match(file.message ?? '', /未开启/);
-  // 没打开开关时，连用户已有文件的一个字节都不碰。
+  assert.match(file.message ?? '', /未添加/);
+  // 没勾选时，连用户已有文件的一个字节都不碰。
   assert.equal(await fs.readFile(path.join(project, adapter.path), 'utf8'), '用户自己的规则\n');
 });
 

@@ -30,16 +30,19 @@ export type BranchList = { available: boolean; reason?: string; current: string;
 // canonical / entry 是整文件，案屿拥有全部字节；marker 只拥有 begin 到 end 之间。
 export type AdapterKind = 'canonical' | 'entry' | 'marker';
 export type Evidence = 'local' | 'docs' | 'unverified';
-// skipped：案屿有权不写（用户在设置里关掉，或规则文件根本不存在）；unverified：证据不足，默认不装。
-export type SkillState = 'ready' | 'missing' | 'custom' | 'outdated' | 'error' | 'skipped' | 'unverified';
-export type SkillCounts = { ready: number; missing: number; custom: number; outdated: number; error: number; skipped: number; unverified: number };
-export type SkillFile = { agent: string; path: string; kind: AdapterKind; evidence: Evidence; note?: string; state: SkillState; message?: string };
-export type ProjectSkill = { state: SkillState | 'partial'; files: SkillFile[]; counts: SkillCounts; marker: boolean };
+// disabled：本项目没勾选这条落点，案屿不写、不升级，也不把它算进就绪判定；
+// skipped：已勾选但按规则不写（规则文件不存在、只剩空白等）；unverified：证据不足，默认不启用。
+export type SkillState = 'ready' | 'missing' | 'custom' | 'outdated' | 'error' | 'skipped' | 'unverified' | 'disabled';
+export type SkillCounts = { ready: number; missing: number; custom: number; outdated: number; error: number; skipped: number; unverified: number; disabled: number };
+export type SkillFile = { key: string; agent: string; path: string; kind: AdapterKind; evidence: Evidence; note?: string; state: SkillState; enabled: boolean; required?: boolean; message?: string };
+export type ProjectSkill = { state: SkillState | 'partial'; files: SkillFile[]; counts: SkillCounts };
 export type SkillAction = 'create' | 'append' | 'replace' | 'remove' | 'skip' | 'conflict' | 'error';
 export type SkillPlanEntry = { agent: string; key: string; path: string; kind: AdapterKind; action: SkillAction; reason: string };
 export type SkillPlan = { entries: SkillPlanEntry[]; counts: Record<SkillAction, number> };
 export type SkillRemoval = { agent: string; key: string; path: string; action: 'removed' | 'kept' | 'skipped'; reason: string };
 export type SkillRemovalResult = { entries: SkillRemoval[]; counts: { removed: number; kept: number; skipped: number } };
+// 选择器里添加、行尾删除一条落点的结果：动作说清是写进去了、清掉了、还是留住没动。
+export type SkillTargetResult = { skill: ProjectSkill; key: string; enabled: boolean; action: 'added' | 'removed' | 'kept' | 'skipped'; reason: string };
 
 export function focusTask(tasks?: Task[]): Task | undefined {
   if (!tasks || !tasks.length) return undefined;
