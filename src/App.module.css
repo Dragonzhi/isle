@@ -525,7 +525,7 @@
 .slipList { display: flex; flex-direction: column; gap: 12px; }
 .slip {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr) 156px;
+  grid-template-columns: 112px minmax(0, 1fr) 180px;
   min-width: 0;
   border: 1px solid var(--line);
   border-left: 3px solid var(--sage);
@@ -970,7 +970,7 @@
   .siteHeader { grid-template-columns: 190px minmax(0, 1fr) auto; gap: 24px; padding: 22px 28px 16px; }
   .headerTitle h1 { font-size: 32px; }
   .main { padding: 20px 28px 38px; }
-  .slip { grid-template-columns: 100px minmax(0, 1fr) 142px; }
+  .slip { grid-template-columns: 100px minmax(0, 1fr) 168px; }
   .slipBody { padding-right: 22px; }
   .slipSide { padding: 16px; }
 }
@@ -2241,7 +2241,8 @@
   .projectForm input:not([type="checkbox"]), .projectForm select, .agentInput,
   .summaryInput, .handoff, .editForm > input, .contextCard .editForm input,
   .slipNext .editForm input, .projectForm textarea { box-shadow: none; border: 1px solid ButtonText; background: Canvas; }
-  .stamp span, .statusChip, .projectFlag, .tag, .focusBadge, .focusTaskChip, .taskGroup h3 small {
+  .stamp span, .statusChip, .projectFlag, .tag, .focusBadge, .focusTaskChip, .taskGroup h3 small,
+  .pinTag, .starButton {
     box-shadow: none;
     border: 1px solid ButtonText;
   }
@@ -2580,3 +2581,42 @@
   .skillRowDelete { min-height: 36px; padding: 4px 10px; }
 }
 
+
+/* ── 特别关注：星标纸键 + 印章标签 ── */
+.slipActions { display: flex; align-items: center; gap: 10px; }
+.starButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--line-dark);
+  border-radius: var(--radius-control);
+  background: var(--sheet);
+  color: var(--muted);
+  box-shadow: 0 3px 0 var(--lp-edge), 0 4px 10px rgba(29, 37, 34, .06), inset 0 1px 0 #fff;
+  cursor: pointer;
+}
+.starButton svg { width: 16px; height: 16px; }
+.starButton:active { transform: translateY(1px); box-shadow: 0 0 0 var(--lp-edge); }
+.starButton[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
+.starButton[aria-pressed="true"] svg { fill: currentColor; }
+.pinTag {
+  flex: none;
+  padding: 4px 7px;
+  border: 1.5px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font: 700 12px/1 var(--sans);
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+@media (hover: hover) {
+  .starButton:hover { color: var(--ink); border-color: var(--ink); }
+}
+@media (pointer: coarse) {
+  .starButton { width: 44px; height: 44px; }
+  .starButton svg { width: 18px; height: 18px; }
+}

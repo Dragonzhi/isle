@@ -26,7 +26,7 @@ async function api(method = 'GET', suffix = '', input?: unknown, endpoint = '/ap
   return request(method, suffix, input, endpoint);
 }
 
-function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron' | 'list' | 'grid' | 'more' | 'check' | 'folder' | 'lock'; size?: number; strokeWidth?: number }) {
+function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 'arrow' | 'refresh' | 'close' | 'island' | 'edit' | 'branch' | 'trash' | 'people' | 'chevron' | 'list' | 'grid' | 'more' | 'check' | 'folder' | 'lock' | 'star'; size?: number; strokeWidth?: number }) {
   const paths = {
     plus: 'M12 5v14M5 12h14', copy: 'M9 9h11v11H9zM15 9V4H4v11h5',
     arrow: 'M5 12h14m-6-6 6 6-6 6', refresh: 'M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12 0l2 5M4 12l2 5a7 7 0 0 0 12 0',
@@ -42,6 +42,7 @@ function Icon({ name, size = 18, strokeWidth = 1.5 }: { name: 'plus' | 'copy' | 
     check: 'M20 6 9 17l-5-5',
     folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z',
     lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
+    star: 'M12 3.6l2.6 5.3 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.7l5.9-.8z',
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
@@ -83,13 +84,14 @@ function parseWorktreeInput(text: string, repoName: string) {
 
 type Editing = { id: string; kind: 'next' | 'summary'; value: string; hash: string; baseline: string; conflict?: boolean; reviewed?: boolean };
 type TransferFormat = 'skill' | 'full';
-type ProjectFilter = 'all' | 'active' | 'paused' | 'offline';
+type ProjectFilter = 'all' | 'active' | 'paused' | 'offline' | 'pinned';
 type ProjectView = 'list' | 'cards';
 type DetailSection = 'summary' | 'history' | 'git';
 type TextSize = 'standard' | 'large' | 'xlarge';
-type BoardGroup = { key: string; members: Project[]; multi: boolean; total: number; latest: string; done: boolean };
+type BoardGroup = { key: string; members: Project[]; multi: boolean; total: number; latest: string; done: boolean; pinned: boolean };
 const TEXT_SIZE_KEY = 'isle.text-size';
 const PROJECT_VIEW_KEY = 'isle.project-view';
+const PINNED_KEY = 'isle.pinned';
 const GIT_VISIBLE = 12;
 const textSizeOptions: { value: TextSize; label: string; px: string }[] = [
   { value: 'standard', label: '标准', px: '17.5px' },
@@ -106,6 +108,15 @@ function readProjectView(): ProjectView {
   try { return localStorage.getItem(PROJECT_VIEW_KEY) === 'cards' ? 'cards' : 'list'; }
   catch { return 'list'; }
 }
+// 特别关注只存在本机浏览器里：是用户自己的取舍，不进 TASKS.md，也不影响其他人的看板。
+function readPinned(): string[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem(PINNED_KEY) ?? '[]');
+    if (!Array.isArray(raw)) return [];
+    return [...new Set(raw.filter((item): item is string => typeof item === 'string' && item.length > 0))];
+  } catch { return []; }
+}
+function groupKey(project: Project) { return project.group ?? 'project:' + project.id; }
 function transferText(project: Project, mode: 'start' | 'close', format: TransferFormat, author: string, criteria: string, goal: string) {
   return format === 'skill' ? skillTransfer(project, mode, author, criteria, goal) : mode === 'close' ? closeout(project, author) : handoff(project, criteria, goal, author);
 }
@@ -155,6 +166,7 @@ function App() {
   const [textSize, setTextSize] = useState<TextSize>(readTextSize);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<ProjectView>(readProjectView);
+  const [pinned, setPinned] = useState<string[]>(readPinned);
   const [moreOpen, setMoreOpen] = useState(false);
   const [openSections, setOpenSections] = useState<Record<DetailSection, boolean>>({ summary: false, history: false, git: false });
   const [selected, setSelected] = useState('');
@@ -233,6 +245,9 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem(PROJECT_VIEW_KEY, view); } catch { /* 隐私模式或存储不可用时只影响本次会话。 */ }
   }, [view]);
+  useEffect(() => {
+    try { localStorage.setItem(PINNED_KEY, JSON.stringify(pinned)); } catch { /* 隐私模式或存储不可用时只影响本次会话。 */ }
+  }, [pinned]);
 
   const projects = data?.projects ?? [];
   const currentId = route.startsWith('#project/') ? route.slice(9) : '';
@@ -240,23 +255,26 @@ function App() {
   const done = projects.filter(project => project.status === '已完成');
   const activeProjects = projects.filter(project => project.status !== '已完成');
   const tabBase = activeProjects.filter(project => !onlyStale || stale(project));
-  const countTabGroups = (predicate: (project: Project) => boolean) => new Set(tabBase.filter(predicate).map(project => project.group ?? 'project:' + project.id)).size;
+  const countTabGroups = (predicate: (project: Project) => boolean) => new Set(tabBase.filter(predicate).map(groupKey)).size;
+  const pinnedSet = new Set(pinned);
   const filterCounts = {
     all: countTabGroups(() => true),
     active: countTabGroups(project => project.state === 'ok' && project.status === '进行中'),
     paused: countTabGroups(project => project.state === 'ok' && project.status === '暂停'),
     offline: countTabGroups(project => project.state !== 'ok'),
+    pinned: countTabGroups(project => pinnedSet.has(groupKey(project))),
   };
   const matchesFilter = (project: Project) => filter === 'all'
     || (filter === 'active' && project.state === 'ok' && project.status === '进行中')
     || (filter === 'paused' && project.state === 'ok' && project.status === '暂停')
-    || (filter === 'offline' && project.state !== 'ok');
+    || (filter === 'offline' && project.state !== 'ok')
+    || (filter === 'pinned' && pinnedSet.has(groupKey(project)));
   const visible = projects.filter(project => (showDone || project.status !== '已完成') && (!onlyStale || stale(project)) && matchesFilter(project));
   const oldCount = projects.filter(stale).length;
-  const activeGroupCount = new Set(activeProjects.map(project => project.group ?? 'project:' + project.id)).size;
+  const activeGroupCount = new Set(activeProjects.map(groupKey)).size;
   const groupTotals = new Map<string, number>();
   for (const project of projects) {
-    const key = project.group ?? 'project:' + project.id;
+    const key = groupKey(project);
     groupTotals.set(key, (groupTotals.get(key) ?? 0) + 1);
   }
   const currentGroup = current?.group ? { label: groupLabel(projects, current.group), count: projects.filter(project => project.group === current.group).length, role: current.role } : null;
@@ -306,7 +324,7 @@ function App() {
   const boardGroups = (() => {
     const buckets = new Map<string, Project[]>();
     for (const project of visible) {
-      const key = project.group ?? 'project:' + project.id;
+      const key = groupKey(project);
       const bucket = buckets.get(key);
       if (bucket) bucket.push(project); else buckets.set(key, [project]);
     }
@@ -315,8 +333,9 @@ function App() {
       const latest = members.reduce((max, project) => project.updated > max ? project.updated : max, '');
       const done = members.every(project => project.status === '已完成');
       const total = groupTotals.get(key) ?? members.length;
-      return { key, members: sorted, multi: total > 1, total, latest, done };
-    }).sort((a, b) => Number(a.done) - Number(b.done) || b.latest.localeCompare(a.latest));
+      return { key, members: sorted, multi: total > 1, total, latest, done, pinned: pinnedSet.has(key) };
+    // 特别关注排在最前，其次是未完成，最后按最近更新时间。
+    }).sort((a, b) => Number(b.pinned) - Number(a.pinned) || Number(a.done) - Number(b.done) || b.latest.localeCompare(a.latest));
   })();
   const navOrder = boardGroups.flatMap(group => group.members);
 
@@ -771,6 +790,13 @@ function App() {
     </div>;
   }
 
+  // 特别关注只动本机浏览器里的这份清单：不写 TASKS.md，不影响别人看到的记录。
+  function togglePinned(key: string, title: string) {
+    const wasPinned = pinned.includes(key);
+    setPinned(previous => previous.includes(key) ? previous.filter(item => item !== key) : [...previous, key]);
+    setNotice({ message: wasPinned ? `已取消「${title}」的特别关注` : `「${title}」已置顶到看板最前` });
+  }
+
   function slipCard(group: BoardGroup) {
     const main = group.members.find(project => project.role === 'main') ?? group.members[0];
     const extras = group.members.filter(project => project.id !== main.id);
@@ -804,6 +830,7 @@ function App() {
         <div className={styles.slipTitle}>
           <h2 id={'slip-title-' + main.id}><a href={'#project/' + main.id}><span className={styles.slipTitleText}>{title}</span><span className={styles.openMark} aria-hidden="true"><Icon name="arrow" size={16} /></span></a></h2>
           <span className={styles.slipCount}>{count}</span>
+          {group.pinned && <span className={styles.pinTag}>特别关注</span>}
         </div>
         <p className={styles.slipPath} title={main.path}>{main.path}</p>
         {offline
@@ -813,9 +840,20 @@ function App() {
       </div>
       <div className={styles.slipSide}>
         <span className={`${styles.slipUpdate} ${stale(main) ? styles.stale : ''}`.trim()} title={main.updated ? main.updated + (main.estimated ? ' (文件时间估值)' : '') : undefined}>{offline ? '离线' : freshness(main)}</span>
-        {offline || finished
-          ? <span className={styles.doneLabel}>{offline ? '不可交接' : '已完成'}</span>
-          : <button className={styles.handoffButton} disabled={busy || Boolean(editing)} onClick={() => void openTransfer(main, 'start')} aria-label={title + '的交接'}><Icon name="copy" />交接</button>}
+        <div className={styles.slipActions}>
+          <button
+            className={styles.starButton}
+            aria-pressed={group.pinned}
+            aria-label={'特别关注：' + title}
+            title={group.pinned ? '取消特别关注' : '特别关注并置顶到看板最前'}
+            onClick={event => { event.stopPropagation(); togglePinned(group.key, title); }}
+          >
+            <Icon name="star" size={16} />
+          </button>
+          {offline || finished
+            ? <span className={styles.doneLabel}>{offline ? '不可交接' : '已完成'}</span>
+            : <button className={styles.handoffButton} disabled={busy || Boolean(editing)} onClick={() => void openTransfer(main, 'start')} aria-label={title + '的交接'}><Icon name="copy" />交接</button>}
+        </div>
       </div>
     </article>;
   }
@@ -1104,7 +1142,7 @@ function App() {
       </> : <>
         <div className={styles.toolbar}>
           <nav className={styles.tabs} aria-label="筛选项目">
-            {([['all', '全部'], ['active', '进行中'], ['paused', '暂停'], ['offline', '离线']] as const).map(([key, label]) => (
+            {([['all', '全部'], ['active', '进行中'], ['paused', '暂停'], ['offline', '离线'], ['pinned', '特别关注']] as const).map(([key, label]) => (
               <button key={key} className={styles.tab} aria-pressed={filter === key} onClick={() => setFilter(key)}>{label}<span>{filterCounts[key]}</span></button>
             ))}
           </nav>
